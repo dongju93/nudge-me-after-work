@@ -1,56 +1,44 @@
-{#
-  공통 레이아웃 — 모든 관리 화면의 부모 템플릿.
-  헤더(브랜드 + 규칙 목록/이력 요약 탭 + 새 규칙 버튼)를 고정하고, 각 화면은
-  {% block content %}만 채운다. 폼 화면(F-03)은 header_center/header_actions 블록을
-  덮어써 취소/저장 버튼으로 교체한다.
-
-  컨텍스트 변수:
-    active_tab: "list" | "history" — 현재 탭 강조용 (기본 "list")
-#}
-<!doctype html>
+{# 공통 레이아웃 — 모든 관리 화면의 부모 템플릿. 헤더(브랜드 + 규칙 목록/이력
+요약 탭 + 새 규칙 버튼)를 고정하고, 각 화면은 {% block content %}만 채운다. 폼
+화면(F-03)은 header_center/header_actions 블록을 덮어써 취소/저장 버튼으로
+교체한다. 컨텍스트 변수: active_tab: "list" | "history" — 현재 탭 강조용 (기본
+"list") #}
+<!DOCTYPE html>
 <html lang="ko">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{% block title %}저녁 넛지 관리자{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}" />
-  </head>
-  <body>
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand__logo">N</div>
-        <div class="brand__title">저녁 넛지 관리자</div>
-      </div>
-
-      {% block header_center %}
-      <nav class="tabs">
-        <a
-          class="tab {% if active_tab == 'list' %}tab--active{% endif %}"
-          href="/"
-          >규칙 목록</a
-        >
-        <a
-          class="tab {% if active_tab == 'history' %}tab--active{% endif %}"
-          href="/history"
-          >이력 요약</a
-        >
-      </nav>
-      {% endblock %}
-
-      <div class="topbar__actions">
-        {% block header_actions %}
-        <a class="btn btn--primary" href="/rules/new">+ 새 규칙</a>
-        {% endblock %}
-      </div>
-    </header>
-
-    <main class="container">
-      {% block content %}
-      <div class="placeholder">
-        골격이 정상 렌더링되었습니다.<br />
-        규칙 목록은 F-03에서 이 영역을 대체합니다.
-      </div>
-      {% endblock %}
-    </main>
-  </body>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>{% block title %}저녁 넛지 관리자{% endblock %}</title>
+        <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}" />
+    </head>
+    <body>
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand__logo">N</div>
+                <div class="brand__title">저녁 넛지 관리자</div>
+            </div>
+            {% block header_center %}
+                <nav class="tabs">
+                    <a class="tab {% if active_tab == 'list' %}tab--active{% endif %}"
+                       href="/">규칙 목록</a>
+                    <a class="tab {% if active_tab == 'history' %}tab--active{% endif %}"
+                       href="/history">이력 요약</a>
+                </nav>
+            {% endblock %}
+            <div class="topbar__actions">
+                {% block header_actions %}
+                    <a class="btn btn--primary" href="/rules/new">+ 새 규칙</a>
+                {% endblock %}
+            </div>
+        </header>
+        <main class="container">
+            {% block content %}
+                <div class="placeholder">
+                    골격이 정상 렌더링되었습니다.
+                    <br />
+                    규칙 목록은 F-03에서 이 영역을 대체합니다.
+                </div>
+            {% endblock %}
+        </main>
+    </body>
 </html>
