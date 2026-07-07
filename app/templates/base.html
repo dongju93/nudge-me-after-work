@@ -8,7 +8,9 @@
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>{% block title %}저녁 넛지 관리자{% endblock %}</title>
+        <meta name="description" content="퇴근 후 저녁 넛지 규칙을 관리하는 관리자 화면입니다." />
+        <meta name="keywords" content="저녁 넛지, 규칙 관리, 이력 요약, 퇴근 후 루틴" />
+        <title>{% block title %}저녁 넛지 관리자{% endblock title %}</title>
         <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}" />
     </head>
     <body>
@@ -20,15 +22,15 @@
             {% block header_center %}
                 <nav class="tabs">
                     <a class="tab {% if active_tab == 'list' %}tab--active{% endif %}"
-                       href="/">규칙 목록</a>
+                       href="{{ url_for('index') }}">규칙 목록</a>
                     <a class="tab {% if active_tab == 'history' %}tab--active{% endif %}"
-                       href="/history">이력 요약</a>
+                       href="{{ url_for('history') }}">이력 요약</a>
                 </nav>
-            {% endblock %}
+            {% endblock header_center %}
             <div class="topbar__actions">
                 {% block header_actions %}
-                    <a class="btn btn--primary" href="/rules/new">+ 새 규칙</a>
-                {% endblock %}
+                    <a class="btn btn--primary" href="{{ url_for('new_rule') }}">+ 새 규칙</a>
+                {% endblock header_actions %}
             </div>
         </header>
         <main class="container">
@@ -38,7 +40,7 @@
                     <br />
                     규칙 목록은 F-03에서 이 영역을 대체합니다.
                 </div>
-            {% endblock %}
+            {% endblock content %}
         </main>
     </body>
 </html>
