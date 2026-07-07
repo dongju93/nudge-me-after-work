@@ -1,0 +1,192 @@
+/*
+ * 공통 스타일 — UI 설계(manage.dc.html)의 다크 테마 oklch 토큰을 CSS 변수로 이관.
+ * 설계 파일은 인라인 스타일을 썼지만, 서버사이드 렌더링에서는 토큰을 한 곳에 모아야
+ * 규칙 목록/폼/이력 화면(F-03·F-07)이 동일한 값을 재사용할 수 있다.
+ */
+
+:root {
+  /* 표면 */
+  --bg: oklch(0.17 0.015 250);
+  --card: oklch(0.215 0.015 250);
+  --border: oklch(0.28 0.015 250);
+  --border-soft: oklch(0.27 0.015 250);
+  --tab-bg: oklch(0.22 0.015 250);
+  --input-bg: oklch(0.25 0.015 250);
+  --input-border: oklch(0.32 0.015 250);
+
+  /* 텍스트 */
+  --text: oklch(0.93 0.005 250);
+  --text-dim: oklch(0.8 0.005 250);
+  --muted: oklch(0.6 0.01 250);
+  --muted-2: oklch(0.5 0.01 250);
+
+  /* 강조/상태 색 (설계의 ACCENT/SUCCESS/DANGER/WARNING/NEUTRAL) */
+  --accent: oklch(0.62 0.15 250);
+  --accent-ink: oklch(0.15 0.01 250); /* accent 배경 위 텍스트 */
+  --success: oklch(0.65 0.15 150);
+  --danger: oklch(0.62 0.17 25);
+  --warning: oklch(0.75 0.13 85);
+  --neutral: oklch(0.45 0.01 250);
+  --none-bg: oklch(0.26 0.015 250);
+
+  --font: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Malgun Gothic", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  padding-bottom: 80px;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+}
+
+input,
+textarea {
+  font-family: inherit;
+}
+
+input:focus,
+textarea:focus,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid oklch(0.62 0.15 250 / 0.5);
+  outline-offset: 1px;
+}
+
+::placeholder {
+  color: var(--muted-2);
+}
+
+/* 다크 배경에서 <input type="time"/date"> 픽커 아이콘을 밝게 반전 */
+::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ── 상단 헤더 ─────────────────────────────────────── */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 32px;
+  border-bottom: 1px solid var(--border);
+  background: oklch(0.17 0.015 250 / 0.96);
+  backdrop-filter: blur(6px);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 160px;
+}
+
+.brand__logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex: none;
+}
+
+.brand__title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.tabs {
+  display: flex;
+  gap: 3px;
+  background: var(--tab-bg);
+  padding: 4px;
+  border-radius: 10px;
+}
+
+.tab {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 8px;
+  color: var(--muted);
+}
+
+.tab--active {
+  background: oklch(0.62 0.15 250 / 0.16);
+  color: var(--accent);
+}
+
+.topbar__actions {
+  min-width: 160px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ── 버튼 ─────────────────────────────────────────── */
+.btn {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 16px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.btn--primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.btn--ghost {
+  color: var(--muted);
+  font-weight: 500;
+  padding: 9px 14px;
+}
+
+/* ── 본문 컨테이너 ─────────────────────────────────── */
+.container {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+/* F-01 골격 확인용 자리표시. F-03에서 규칙 목록이 이 영역을 대체한다. */
+.placeholder {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}

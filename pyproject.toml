@@ -1,0 +1,18 @@
+[project]
+name = "nudge-me-after-work"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "apscheduler==3.11.3",
+    "fastapi[standard]==0.139.0",
+    "httpx2==2.5.0",
+    "sqlmodel==0.0.39",
+]
+
+[tool.pyrefly]
+project-includes = ["**/*.py*", "**/*.ipynb"]
+
+[dependency-groups]
+dev = ["pytest-asyncio==1.4.0"]
