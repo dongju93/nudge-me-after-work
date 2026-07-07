@@ -15,4 +15,4 @@ dependencies = [
 project-includes = ["**/*.py*", "**/*.ipynb"]
 
 [dependency-groups]
-dev = ["pytest-asyncio==1.4.0"]
+dev = ["djlint==1.40.3", "pytest-asyncio==1.4.0"]
