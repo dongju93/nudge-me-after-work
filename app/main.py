@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 
 import httpx2
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
@@ -58,6 +59,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
 
 app = FastAPI(title="저녁 넛지 관리자", lifespan=lifespan)
+
+# ntfy 웹 UI는 /nudge 경로에서 열리지만, CORS는 scheme/host/port origin 단위로 검사한다.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://cloud-vault-go.duckdns.org:58252"],
+    allow_methods=["POST"],
+    allow_headers=["*"],
+)
 
 # 정적 파일(style.css 등)을 /static 경로로 서빙.
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
