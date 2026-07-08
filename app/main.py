@@ -19,6 +19,7 @@ from app.config import get_settings
 from app.db import init_db
 from app.notifier import Notifier
 from app.routers import history, rules, webhooks
+from app.scheduler import create_scheduler
 from app.templating import BASE_DIR
 
 
@@ -27,8 +28,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """앱 수명 주기 훅.
 
     yield 이전(기동)에 설정 로딩, F-02의 `init_db()`(스키마 생성), F-04의 공유 httpx
-    클라이언트/`Notifier` 준비를 수행한다. 이후 F-06의 스케줄러 `start()`가 기동에,
-    스케줄러 `shutdown()`이 종료(yield 이후)에 순차적으로 채워진다.
+    클라이언트/`Notifier` 준비를 수행하고, F-06의 스케줄러를 `start()`한다. yield 이후
+    (종료)에 스케줄러 `shutdown()` → httpx 클라이언트 `aclose()` 순으로 정리한다.
     """
     # --- 기동(startup) ---
     settings = get_settings()  # .env 로딩을 부팅 시점에 강제해 설정 오류를 조기 노출
@@ -41,10 +42,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     app.state.ntfy_client = ntfy_client
     app.state.notifier = Notifier(ntfy_client, settings)
 
+    # F-06 스케줄러: 매분 tick으로 최초 알림/스누즈 재발송/컷오프 종료를 처리한다.
+    # lifespan이 도는 앱 이벤트 루프에 start()로 붙어, 같은 루프에서 async tick과 공유
+    # httpx 클라이언트를 그대로 쓴다.
+    scheduler = create_scheduler(notifier=app.state.notifier, settings=settings)
+    scheduler.start()
+    app.state.scheduler = scheduler
+
     yield
     # --- 종료(shutdown) ---
-    # 커넥션 풀을 깔끔히 닫는다. (스케줄러 shutdown()은 F-06에서 이 앞에 추가된다.)
-    await ntfy_client.aclose()
+    # wait=False: tick이 발행 await 중이면 이벤트 루프를 블로킹해 데드락이 날 수 있으므로
+    # 완료를 기다리지 않고 즉시 잡 실행을 멈춘다. 예약 상태는 DB에 있어 유실되지 않는다.
+    scheduler.shutdown(wait=False)
+    await ntfy_client.aclose()  # 커넥션 풀 정리
 
 
 app = FastAPI(title="저녁 넛지 관리자", lifespan=lifespan)

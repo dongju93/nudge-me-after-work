@@ -46,6 +46,18 @@ def _close(session: NudgeSession, status: SessionStatus) -> None:
     session.next_message = None
 
 
+def auto_close_no_response(session: NudgeSession) -> None:
+    """컷오프 도달 세션을 '무응답' 종료한다 (F-06 (c), UC-09).
+
+    완료/포기와 **동일한 종료 경로**(`_close`)를 재사용한다 — `ended_at` 기록과 예약
+    재알림 해제(`next_notify_at`/`next_message` = None)를 한 규칙으로 통일해, 스케줄러의
+    자동 종료가 webhook의 수동 종료와 어긋나지 않게 한다(이 모듈의 존재 이유). 알림은
+    발행하지 않으며, `SessionEvent(AUTO_CLOSED)` 기록·커밋은 호출자(스케줄러)가
+    트랜잭션 경계를 통제하도록 여기서 하지 않는다.
+    """
+    _close(session, SessionStatus.NO_RESPONSE)
+
+
 def apply_action(db: DBSession, session: NudgeSession, action: RuleAction) -> None:
     """진행 중 세션에 버튼 액션 1건을 적용한다(UC-05~08).
 
