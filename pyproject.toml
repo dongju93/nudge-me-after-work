@@ -8,6 +8,7 @@ dependencies = [
     "apscheduler==3.11.3",
     "fastapi[standard]==0.139.0",
     "httpx2==2.5.0",
+    "sqlalchemy-libsql==0.2.0",
     "sqlmodel==0.0.39",
 ]
 

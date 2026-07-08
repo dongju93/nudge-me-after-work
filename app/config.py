@@ -25,7 +25,11 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # 기본값이 있는 항목: 로컬 SQLite 파일. F-02에서 이 URL로 엔진을 만든다.
+    # Turso 원격 DB. 둘 다 설정되면 로컬 database_url보다 우선한다.
+    turso_conn: str | None = None
+    turso_token: str | None = None
+
+    # 기본값이 있는 항목: 로컬 SQLite 파일. Turso 설정이 없을 때 이 URL로 엔진을 만든다.
     database_url: str = "sqlite:///./data/nudge.db"
 
     # ntfy 발행 대상 (F-04). base_url은 ntfy 서버 루트, topic은 구독 주제.
