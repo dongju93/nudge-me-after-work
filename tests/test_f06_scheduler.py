@@ -27,7 +27,7 @@ from app.models import (
     SessionStatus,
 )
 from app.notifier import Notifier, NtfyPublishError
-from app.scheduler import _WEEKDAY_TOKENS, tick
+from app.scheduler import _WEEKDAY_TOKENS, _is_duplicate_session_error, tick
 
 KST = ZoneInfo("Asia/Seoul")
 GRACE_MINUTES = 10
@@ -270,6 +270,17 @@ async def test_first_notification_not_duplicated(engine):
 
     assert len(_sessions(engine)) == 1
     assert len(notifier.calls) == 1  # 중복 발행 없음
+
+
+def test_duplicate_session_error_recognizes_libsql_hrana_value_error():
+    """libSQL/Hrana 드라이버의 UNIQUE 위반 ValueError도 오늘 세션 중복으로 본다."""
+    error = ValueError(
+        "Hrana: `stream error: `Error { message: "
+        '"SQLite error: UNIQUE constraint failed: sessions.rule_id, sessions.date", '
+        'code: "SQLITE_CONSTRAINT" }``'
+    )
+
+    assert _is_duplicate_session_error(error)
 
 
 async def test_publish_failure_keeps_session_without_sent(engine):

@@ -93,6 +93,8 @@ async def tick(
     if now is None:
         now = datetime.now(ZoneInfo(settings.timezone))
 
+    logger.info("스케줄러 tick 실행 — now=%s timezone=%s", now.isoformat(), settings.timezone)
+
     await _trigger_first_notifications(notifier, settings, engine, now)
     await _resend_due_snoozes(notifier, engine, now)
     _close_past_cutoff(engine, now)
@@ -131,12 +133,22 @@ async def _open_session_and_notify(
 ) -> None:
     """규칙의 오늘 세션을 만들고(중복이면 무시) 최초 알림을 발행한다.
 
-    "오늘 세션 없음"의 최종 판정은 별도 조회가 아니라 INSERT + UniqueConstraint로 한다
-    (F-02 `uq_sessions_rule_date`). 중복이면 IntegrityError → 이미 처리된 것이므로 조용히
-    건너뛴다(UC-04 마지막 안전장치). 발행 실패(재시도 소진) 시엔 세션만 남기고 SENT는
-    기록하지 않은 채 진행한다 — 다음 단계/다음 tick을 막지 않는 것이 우선이다(스펙 §4).
+    같은 grace window 안에서 다음 tick이 다시 돌 수 있으므로 먼저 오늘 세션 존재 여부를
+    조회해 중복 INSERT를 피한다. 최종 안전장치는 여전히 F-02 `uq_sessions_rule_date`다.
+    중복이면 이미 처리된 것이므로 조용히 건너뛴다. 발행 실패(재시도 소진) 시엔 세션만
+    남기고 SENT는 기록하지 않은 채 진행한다 — 다음 단계/다음 tick을 막지 않는 것이 우선이다
+    (스펙 §4).
     """
     assert rule.id is not None
+    existing_session = db.exec(
+        select(NudgeSession).where(
+            col(NudgeSession.rule_id) == rule.id,
+            col(NudgeSession.date) == today,
+        )
+    ).first()
+    if existing_session is not None:
+        return
+
     session = NudgeSession(
         rule_id=rule.id, date=today, status=SessionStatus.IN_PROGRESS
     )
@@ -146,6 +158,11 @@ async def _open_session_and_notify(
     except IntegrityError:
         db.rollback()
         return  # 오늘 세션이 이미 존재 → 중복 발행 방지
+    except ValueError as exc:
+        db.rollback()
+        if _is_duplicate_session_error(exc):
+            return  # libSQL/Hrana는 UNIQUE 위반을 ValueError로 올릴 수 있다.
+        raise
     db.refresh(session)
     assert session.id is not None  # 방금 커밋된 세션 → PK 채워짐(타입 내로잉)
 
@@ -153,6 +170,15 @@ async def _open_session_and_notify(
     if await _publish(notifier, rule=rule, session_id=session.id, message=rule.message):
         db.add(SessionEvent(session_id=session.id, event_type=EventType.SENT))
         db.commit()
+
+
+def _is_duplicate_session_error(error: BaseException) -> bool:
+    """드라이버별 UNIQUE 위반 메시지를 오늘 세션 중복으로 식별한다."""
+    message = str(error)
+    return (
+        "UNIQUE constraint failed: sessions.rule_id, sessions.date" in message
+        or "uq_sessions_rule_date" in message
+    )
 
 
 # --- (b) 스누즈 재발송 (UC-06) ----------------------------------------------

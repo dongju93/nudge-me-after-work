@@ -141,14 +141,14 @@ def _parse_time(value: str) -> time | None:
     """ "HH:MM" 문자열을 time으로. 형식 오류/빈 값은 None."""
     try:
         return time.fromisoformat(value.strip())
-    except ValueError, AttributeError:
+    except (ValueError, AttributeError):
         return None
 
 
 def _parse_int(value: str) -> int | None:
     try:
         return int(value.strip())
-    except ValueError, AttributeError:
+    except (ValueError, AttributeError):
         return None
 
 
