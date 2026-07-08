@@ -1,0 +1,180 @@
+{# 규칙 폼 (F-03) — 신규 생성/수정 공용. UI 설계(manage.dc.html)의 form 뷰를 이식.
+   헤더의 탭/‘새 규칙’ 버튼을 폼 제목과 취소/저장으로 교체한다. 저장 버튼은 헤더에
+   있고 폼은 content 블록에 있으므로 form="rule-form" 연결로 제출한다.
+   컨텍스트: draft(dict), rule_id(int|None), errors(list[str]), weekdays,
+   action_type_choices, is_editing. #}
+{% extends "base.html" %}
+{% block title %}
+    {{ '규칙 수정' if is_editing else '새 규칙' }} · 저녁 넛지 관리자
+{% endblock title %}
+{# 헤더 가운데: 탭 대신 폼 제목 #}
+{% block header_center %}
+    <div class="form-title">
+        {{ '규칙 수정' if is_editing else '새 규칙 만들기' }}
+        {%- if is_editing and draft.name %}· {{ draft.name }}{% endif %}
+    </div>
+{% endblock header_center %}
+{# 헤더 오른쪽: 취소 / 저장. 저장은 form 속성으로 아래 폼을 제출 #}
+{% block header_actions %}
+    <a class="btn btn--ghost" href="{{ url_for('index') }}">취소</a>
+    <button type="submit" form="rule-form" class="btn btn--primary">저장</button>
+{% endblock header_actions %}
+{% block content %}
+    {% set form_action = url_for('update_rule', rule_id=rule_id) if is_editing else url_for('create_rule') %}
+    <form id="rule-form"
+          method="post"
+          action="{{ form_action }}"
+          class="rule-form">
+        {% if errors %}
+            <div class="form-errors" role="alert">
+                <div class="form-errors__title">입력을 확인해 주세요</div>
+                <ul>
+                    {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+        {# ── 기본 정보 ───────────────────────────────── #}
+        <section class="form-card">
+            <div class="form-card__title">기본 정보</div>
+            <div class="field">
+                <label class="field__label" for="name">규칙 이름</label>
+                <input class="input"
+                       id="name"
+                       name="name"
+                       value="{{ draft.name }}"
+                       placeholder="예: 운동 리마인더" />
+            </div>
+            <label class="switch-row" for="is_active">
+                <span class="switch-row__label">활성 상태</span>
+                <span class="switch">
+                    <input type="checkbox"
+                           id="is_active"
+                           name="is_active"
+                           {% if draft.is_active %}checked{% endif %} />
+                    <span class="toggle" aria-hidden="true"><span class="toggle__knob"></span></span>
+                </span>
+            </label>
+        </section>
+        {# ── 일정 ────────────────────────────────────── #}
+        <section class="form-card">
+            <div class="form-card__title">일정</div>
+            <div class="field">
+                <span class="field__label">알림 요일</span>
+                <div class="wpills">
+                    {% for code, label in weekdays %}
+                        <label class="wpill">
+                            <input type="checkbox"
+                                   name="weekdays"
+                                   value="{{ code }}"
+                                   {% if code in draft.weekdays %}checked{% endif %} />
+                            <span>{{ label }}</span>
+                        </label>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="grid-2">
+                <div class="field">
+                    <label class="field__label" for="start_time">시작 시각</label>
+                    <input type="time"
+                           class="input"
+                           id="start_time"
+                           name="start_time"
+                           value="{{ draft.start_time }}" />
+                </div>
+                <div class="field">
+                    <label class="field__label" for="cutoff_time">컷오프 시각</label>
+                    <input type="time"
+                           class="input"
+                           id="cutoff_time"
+                           name="cutoff_time"
+                           value="{{ draft.cutoff_time }}" />
+                </div>
+            </div>
+        </section>
+        {# ── 최초 알림 메시지 ─────────────────────────── #}
+        <section class="form-card">
+            <label class="form-card__title" for="message">최초 알림 메시지</label>
+            <textarea class="textarea"
+                      id="message"
+                      name="message"
+                      rows="2"
+                      placeholder="예: 이제 운동할 시간이야">{{ draft.message }}</textarea>
+        </section>
+        <div class="form-section-heading">알림 버튼 &amp; 후속 액션</div>
+        {# ── 버튼 3개 고정 ───────────────────────────── #}
+        {% for action in draft.actions %}
+            {% set i = loop.index %}
+            <section class="action-card">
+                <div class="action-card__head">
+                    <span class="action-card__badge"></span>
+                    <span class="action-card__title">버튼 {{ i }}</span>
+                </div>
+                <div class="field">
+                    <label class="field__label" for="action_label_{{ i }}">버튼 라벨</label>
+                    <input class="input"
+                           id="action_label_{{ i }}"
+                           name="action_label_{{ i }}"
+                           value="{{ action.label }}" />
+                </div>
+                <div class="field">
+                    <span class="field__label">액션 타입</span>
+                    <div class="segmented">
+                        {% for value, label in action_type_choices %}
+                            <label class="seg seg--{{ value }}">
+                                <input type="radio"
+                                       name="action_type_{{ i }}"
+                                       value="{{ value }}"
+                                       {% if action.action_type == value %}checked{% endif %} />
+                                <span>{{ label }}</span>
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {# snooze일 때만 노출 — CSS :has()로 show/hide(아래 fallback JS 포함) #}
+                <div class="snooze-detail">
+                    <div class="field">
+                        <label class="field__label" for="action_snooze_minutes_{{ i }}">지연 시간(분)</label>
+                        <input type="number"
+                               min="1"
+                               class="input"
+                               id="action_snooze_minutes_{{ i }}"
+                               name="action_snooze_minutes_{{ i }}"
+                               value="{{ action.snooze_minutes }}" />
+                    </div>
+                    <div class="field">
+                        <label class="field__label" for="action_snooze_message_{{ i }}">재알림 문구</label>
+                        <input class="input"
+                               id="action_snooze_message_{{ i }}"
+                               name="action_snooze_message_{{ i }}"
+                               value="{{ action.snooze_message }}" />
+                    </div>
+                </div>
+            </section>
+        {% endfor %}
+    </form>
+    {# 삭제는 별도 폼(폼 중첩 불가). 수정 화면에서만 노출 #}
+    {% if is_editing %}
+        <form method="post"
+              action="{{ url_for('delete_rule', rule_id=rule_id) }}"
+              class="delete-form"
+              onsubmit="return confirm('이 규칙을 삭제할까요? 관련 이력도 함께 사라집니다.');">
+            <button type="submit" class="btn-delete">이 규칙 삭제</button>
+        </form>
+    {% endif %}
+    {# :has() 미지원 브라우저용 최소 fallback — snooze 필드 show/hide만 보강.
+       세그먼트 색/뱃지 색은 장식이라 progressive enhancement로 둔다(가이드 권장). #}
+    <script>
+      if (!CSS.supports('selector(:has(*))')) {
+        document.querySelectorAll('.action-card').forEach(function (card) {
+          function sync() {
+            var snooze = card.querySelector('input[value="snooze"]');
+            card.classList.toggle('is-snooze', !!(snooze && snooze.checked));
+          }
+          card.querySelectorAll('input[type="radio"]').forEach(function (radio) {
+            radio.addEventListener('change', sync);
+          });
+          sync();
+        });
+      }
+    </script>
+{% endblock content %}

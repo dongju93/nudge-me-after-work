@@ -190,3 +190,522 @@ a {
   font-size: 14px;
   line-height: 1.7;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+ * F-03 규칙 CRUD 화면
+ * ═══════════════════════════════════════════════════════════════ */
+
+/* 폼 헤더 제목(탭 대체) */
+.form-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+/* 빈 목록 상태 */
+.empty {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.empty strong {
+  color: var(--accent);
+}
+
+/* ── 공용 토글 스위치 ─────────────────────────────────
+ * 목록: <button class="toggle toggle--on"> (서버 렌더 상태)
+ * 폼:   <input type=checkbox> + <span class="toggle">  (:checked로 상태)
+ */
+.toggle {
+  display: inline-block;
+  width: 38px;
+  height: 22px;
+  border-radius: 11px;
+  position: relative;
+  flex: none;
+  background: oklch(0.32 0.015 250);
+  transition: background 0.15s;
+}
+
+.toggle__knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: oklch(0.98 0 0);
+  transition: left 0.15s;
+}
+
+/* 켜짐 상태: 목록 버튼(.toggle--on) + 폼 체크박스(:checked + .toggle) 공용 */
+.toggle--on,
+.switch input:checked + .toggle {
+  background: var(--accent);
+}
+
+.toggle--on .toggle__knob,
+.switch input:checked + .toggle .toggle__knob {
+  left: 19px;
+}
+
+/* 폼 토글: 네이티브 체크박스를 숨기고 .toggle 시각만 노출 */
+.switch {
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* ── 규칙 카드(목록) ─────────────────────────────────── */
+.rules {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rule-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rule-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.rule-card__ident {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.rule-card__name {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.rule-card__meta {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.rule-card__meta .is-active {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.rule-card__meta .is-inactive {
+  color: var(--muted-2);
+  font-weight: 600;
+}
+
+.rule-card__actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+/* 이력 보기 / 수정 링크 버튼 */
+.chip-btn {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-dim);
+  padding: 7px 12px;
+  border-radius: 7px;
+  background: var(--input-bg);
+}
+
+.chip-btn--accent {
+  font-weight: 600;
+  color: var(--accent);
+  background: oklch(0.62 0.15 250 / 0.14);
+}
+
+/* 요일 칩(정적) */
+.wchips {
+  display: flex;
+  gap: 6px;
+}
+
+.wchip {
+  font-size: 11.5px;
+  font-weight: 600;
+  width: 26px;
+  padding: 5px 3px;
+  text-align: center;
+  border-radius: 6px;
+  background: transparent;
+  color: oklch(0.42 0.01 250);
+}
+
+.wchip--on {
+  background: oklch(0.62 0.15 250 / 0.18);
+  color: var(--accent);
+}
+
+.rule-card__message {
+  font-size: 13px;
+  color: oklch(0.72 0.01 250);
+  font-style: italic;
+}
+
+/* 액션 칩 */
+.achips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.achip {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  background: var(--input-bg);
+  color: oklch(0.75 0.01 250);
+}
+
+.achip__dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.achip__dot--complete {
+  background: var(--success);
+}
+
+.achip__dot--snooze {
+  background: var(--warning);
+}
+
+.achip__dot--abandon {
+  background: var(--danger);
+}
+
+/* 14일 미니 차트 + 완료율 (F-03 자리표시, F-07에서 실데이터) */
+.rule-card__stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.rule-card__stats-label {
+  font-size: 11px;
+  color: var(--muted-2);
+  margin-bottom: 6px;
+}
+
+.bars {
+  display: flex;
+  gap: 3px;
+  align-items: flex-end;
+}
+
+.bar {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--none-bg);
+}
+
+.rule-card__rate {
+  text-align: right;
+  flex: none;
+}
+
+.rate {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.rate--none {
+  color: var(--muted-2);
+}
+
+/* ── 규칙 폼 ─────────────────────────────────────────── */
+.rule-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.form-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.form-card__title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.form-section-heading {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-top: 6px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+}
+
+.field__label {
+  font-size: 12.5px;
+  color: oklch(0.65 0.01 250);
+  margin-bottom: 6px;
+}
+
+.input,
+.textarea {
+  width: 100%;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.textarea {
+  resize: none;
+  line-height: 1.5;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.switch-row__label {
+  font-size: 13.5px;
+  color: var(--text-dim);
+}
+
+/* 요일 선택 pill(폼) — 네이티브 체크박스 숨기고 라벨을 pill로 */
+.wpills {
+  display: flex;
+  gap: 6px;
+}
+
+.wpill {
+  flex: 1;
+  cursor: pointer;
+}
+
+.wpill input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.wpill span {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 3px;
+  text-align: center;
+  border-radius: 7px;
+  background: var(--input-bg);
+  color: var(--muted-2);
+}
+
+.wpill input:checked + span {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* ── 액션(버튼) 카드 ─────────────────────────────────── */
+.action-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.action-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-card__badge {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--neutral);
+}
+
+/* 뱃지 색을 선택된 타입과 동기화(순수 CSS :has) */
+.action-card:has(.seg--complete input:checked) .action-card__badge {
+  background: var(--success);
+}
+
+.action-card:has(.seg--snooze input:checked) .action-card__badge {
+  background: var(--warning);
+}
+
+.action-card:has(.seg--abandon input:checked) .action-card__badge {
+  background: var(--danger);
+}
+
+.action-card__title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* 3택 세그먼트 컨트롤 — 네이티브 라디오 숨기고 라벨 스타일링 */
+.segmented {
+  display: flex;
+  gap: 6px;
+}
+
+.seg {
+  flex: 1;
+  cursor: pointer;
+}
+
+.seg input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.seg span {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 9px 8px;
+  text-align: center;
+  border-radius: 7px;
+  background: var(--input-bg);
+  color: var(--muted);
+  border: 1px solid transparent;
+}
+
+.seg--complete:has(input:checked) span {
+  background: oklch(0.65 0.15 150 / 0.18);
+  color: var(--success);
+  border-color: oklch(0.65 0.15 150 / 0.4);
+}
+
+.seg--snooze:has(input:checked) span {
+  background: oklch(0.75 0.13 85 / 0.18);
+  color: var(--warning);
+  border-color: oklch(0.75 0.13 85 / 0.4);
+}
+
+.seg--abandon:has(input:checked) span {
+  background: oklch(0.62 0.17 25 / 0.18);
+  color: var(--danger);
+  border-color: oklch(0.62 0.17 25 / 0.4);
+}
+
+/* snooze 상세: snooze 타입 선택 시에만 노출(:has) */
+.snooze-detail {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.action-card:not(:has(.seg--snooze input:checked)) .snooze-detail {
+  display: none;
+}
+
+/* :has() 미지원 fallback — 폼 템플릿의 소형 JS가 .is-snooze를 토글 */
+@supports not selector(:has(*)) {
+  .snooze-detail {
+    display: none;
+  }
+
+  .action-card.is-snooze .snooze-detail {
+    display: grid;
+  }
+}
+
+/* 삭제 */
+.delete-form {
+  max-width: 600px;
+  margin: 4px auto 0;
+}
+
+.btn-delete {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--danger);
+  padding: 10px 4px;
+}
+
+/* 검증 에러 배너 */
+.form-errors {
+  background: oklch(0.62 0.17 25 / 0.12);
+  border: 1px solid oklch(0.62 0.17 25 / 0.4);
+  border-radius: 12px;
+  padding: 14px 18px;
+  color: oklch(0.8 0.08 25);
+}
+
+.form-errors__title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.form-errors ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.7;
+}

@@ -1,29 +1,27 @@
 """FastAPI 앱 진입점.
 
-앱 생성, lifespan(기동/종료 훅), 템플릿·정적 파일 마운트, 최상위 라우트를 구성한다.
+앱 생성, lifespan(기동/종료 훅), 정적 파일 마운트, 라우터 등록을 구성한다.
 실행: `uv run fastapi dev app/main.py` (개발) / `uv run fastapi run app/main.py` (운영)
+
+라우트 자체는 기능별 라우터로 분리한다 — 규칙 CRUD는 `routers/rules.py`(F-03),
+이력 요약은 `routers/history.py`(F-07). 템플릿 인스턴스는 순환 import를 피하려고
+`app/templating.py`에 두고 main과 라우터가 공유한다.
 """
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from pathlib import Path
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 
 from app.config import get_settings
 from app.db import init_db
-
-# 경로는 이 파일 위치를 기준으로 해석한다 — 실행 CWD가 무엇이든 템플릿/정적 파일을
-# 찾을 수 있어(예: systemd, 테스트 러너) 스펙의 "app/templates" 상대 경로보다 견고하다.
-BASE_DIR = Path(__file__).resolve().parent
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+from app.routers import history, rules
+from app.templating import BASE_DIR
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """앱 수명 주기 훅.
 
     yield 이전(기동)에 설정 로딩과 F-02의 `init_db()`(스키마 생성)를 수행한다.
@@ -43,16 +41,6 @@ app = FastAPI(title="저녁 넛지 관리자", lifespan=lifespan)
 # 정적 파일(style.css 등)을 /static 경로로 서빙.
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
-
-@app.get("/", response_class=HTMLResponse)
-async def index(request: Request) -> HTMLResponse:
-    """최상위 라우트.
-
-    F-01에서는 base 레이아웃만 렌더링해 골격이 뜨는지 확인한다. F-03에서 규칙 목록
-    (`rules_list.html`)이 이 경로를 대체한다.
-    """
-    return templates.TemplateResponse(
-        request,
-        "base.html",
-        {"active_tab": "list"},
-    )
+# 라우터 등록. rules는 최상위(`/`, `/rules/*`), history는 `/history`를 담당한다.
+app.include_router(rules.router)
+app.include_router(history.router)

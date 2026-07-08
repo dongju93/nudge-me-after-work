@@ -1,0 +1,80 @@
+{# 규칙 목록 (F-03) — UI 설계(manage.dc.html)의 list 뷰를 서버사이드로 이식.
+   각 규칙을 카드로 렌더링한다: 토글 스위치·이름·요약 / 요일 칩 / 메시지 / 액션 칩 /
+   14일 미니 차트(자리표시, F-07에서 실데이터). 토글·삭제는 폼 POST다.
+   컨텍스트: rules(list[Rule]), weekdays(list[(code, label)]), active_tab. #}
+{% extends "base.html" %}
+{% block title %}규칙 목록 · 저녁 넛지 관리자{% endblock title %}
+{% block content %}
+    {% if not rules %}
+        <div class="empty">
+            아직 등록된 규칙이 없습니다.
+            <br />
+            오른쪽 위 <strong>+ 새 규칙</strong>으로 첫 저녁 넛지를 만들어 보세요.
+        </div>
+    {% else %}
+        <div class="rules">
+            {% for rule in rules %}
+                <article class="rule-card">
+                    <div class="rule-card__head">
+                        <div class="rule-card__ident">
+                            {# 토글: 브라우저 폼은 GET/POST만 지원하므로 POST로 is_active 반전 #}
+                            <form method="post" action="{{ url_for('toggle_rule', rule_id=rule.id) }}">
+                                <button type="submit"
+                                        class="toggle {% if rule.is_active %}toggle--on{% endif %}"
+                                        aria-pressed="{{ 'true' if rule.is_active else 'false' }}"
+                                        title="{{ '비활성화' if rule.is_active else '활성화' }}">
+                                    <span class="toggle__knob"></span>
+                                </button>
+                            </form>
+                            <div>
+                                <div class="rule-card__name">{{ rule.name }}</div>
+                                <div class="rule-card__meta">
+                                    {{ rule.start_time.strftime("%H:%M") }} 시작 ·
+                                    {{ rule.cutoff_time.strftime("%H:%M") }} 컷오프 ·
+                                    <span class="{{ 'is-active' if rule.is_active else 'is-inactive' }}">{{ '활성' if rule.is_active else '비활성' }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="rule-card__actions">
+                            <a class="chip-btn"
+                               href="{{ url_for('history') }}?rule_id={{ rule.id }}">이력 보기</a>
+                            <a class="chip-btn chip-btn--accent"
+                               href="{{ url_for('edit_rule', rule_id=rule.id) }}">수정</a>
+                        </div>
+                    </div>
+                    {# 요일 칩 7개: 규칙에 포함된 요일만 강조 #}
+                    <div class="wchips">
+                        {% for code, label in weekdays %}
+                            <div class="wchip {% if code in rule.weekday_list %}wchip--on{% endif %}">{{ label }}</div>
+                        {% endfor %}
+                    </div>
+                    <div class="rule-card__message">"{{ rule.message }}"</div>
+                    {# 액션 칩: 라벨 · 타입. 타입별 색 점(dot)으로 구분 #}
+                    <div class="achips">
+                        {% for action in rule.actions %}
+                            <div class="achip">
+                                <span class="achip__dot achip__dot--{{ action.action_type.value }}"></span>
+                                {{ action.label }} · {{ action_type_labels[action.action_type.value] }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                    {# 최근 14일 막대 + 완료율: F-03에서는 자리표시만. F-07에서 실데이터로 대체 #}
+                    <div class="rule-card__stats">
+                        <div>
+                            <div class="rule-card__stats-label">최근 14일</div>
+                            <div class="bars">
+                                {% for _ in range(14) %}
+                                    <div class="bar"></div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="rule-card__rate">
+                            <div class="rate rate--none">—</div>
+                            <div class="rule-card__stats-label">완료율</div>
+                        </div>
+                    </div>
+                </article>
+            {% endfor %}
+        </div>
+    {% endif %}
+{% endblock content %}
