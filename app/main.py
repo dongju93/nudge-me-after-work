@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.config import get_settings
+from app.db import init_db
 
 # 경로는 이 파일 위치를 기준으로 해석한다 — 실행 CWD가 무엇이든 템플릿/정적 파일을
 # 찾을 수 있어(예: systemd, 테스트 러너) 스펙의 "app/templates" 상대 경로보다 견고하다.
@@ -25,13 +26,14 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """앱 수명 주기 훅.
 
-    현재(F-01)는 비어 있다. yield 이전(기동)에 F-02의 `init_db()`와 F-06의
-    스케줄러 `start()`가, yield 이후(종료)에 스케줄러 `shutdown()`과 httpx 클라이언트
-    정리가 순차적으로 채워진다.
+    yield 이전(기동)에 설정 로딩과 F-02의 `init_db()`(스키마 생성)를 수행한다.
+    이후 F-06의 스케줄러 `start()`가 기동에, 스케줄러 `shutdown()`과 httpx 클라이언트
+    정리가 종료(yield 이후)에 순차적으로 채워진다.
     """
     # --- 기동(startup) ---
     settings = get_settings()  # .env 로딩을 부팅 시점에 강제해 설정 오류를 조기 노출
     app.state.settings = settings
+    init_db()  # data/nudge.db에 테이블 4종 생성(idempotent). 없으면 디렉터리도 생성.
     yield
     # --- 종료(shutdown) ---
 
