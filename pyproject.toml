@@ -14,5 +14,12 @@ dependencies = [
 [tool.pyrefly]
 project-includes = ["**/*.py*", "**/*.ipynb"]
 
+[tool.pytest.ini_options]
+# webhook 엔드포인트 테스트는 async(httpx2 AsyncClient)라 pytest-asyncio가 필요하다.
+# auto 모드로 두면 async 테스트에 매번 @pytest.mark.asyncio를 붙이지 않아도 된다.
+asyncio_mode = "auto"
+# tests/가 프로젝트 루트의 `app` 패키지를 import할 수 있게 루트를 sys.path에 추가한다.
+pythonpath = ["."]
+
 [dependency-groups]
 dev = ["djlint==1.40.3", "pytest-asyncio==1.4.0"]

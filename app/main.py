@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import get_settings
 from app.db import init_db
 from app.notifier import Notifier
-from app.routers import history, rules
+from app.routers import history, rules, webhooks
 from app.templating import BASE_DIR
 
 
@@ -53,5 +53,8 @@ app = FastAPI(title="저녁 넛지 관리자", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 # 라우터 등록. rules는 최상위(`/`, `/rules/*`), history는 `/history`를 담당한다.
+# webhooks는 `/webhooks/*` — ntfy 서버가 호출하는 F-05 엔드포인트로, F-08 관리자 인증의
+# 예외다(토큰 검증만 적용).
 app.include_router(rules.router)
 app.include_router(history.router)
+app.include_router(webhooks.router)
