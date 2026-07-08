@@ -211,3 +211,5 @@ pyrightconfig.json
 # SQLite DB + WAL/SHM sidecars (F-02) live under data/
 data/
 docs/
+AGENTS.md
+CLAUDE.md
