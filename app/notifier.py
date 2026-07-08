@@ -57,6 +57,7 @@ class Notifier:
         최종 실패하면 `NtfyPublishError`를 던진다.
         """
         payload = self._build_payload(rule=rule, session_id=session_id, message=message)
+        headers = self._build_headers()
 
         # 재시도 소진 시 마지막 실패 원인을 예외에 실어 보내기 위한 추적 변수.
         last_error = "원인 불명"
@@ -65,7 +66,7 @@ class Notifier:
         for attempt in range(_MAX_RETRIES + 1):  # 0..3 → 초기 1회 + 재시도 3회
             try:
                 response = await self._client.post(
-                    self._settings.ntfy_base_url, json=payload
+                    self._settings.ntfy_base_url, json=payload, headers=headers
                 )
             except httpx2.TransportError as exc:
                 # 연결 거부·DNS 실패·타임아웃 등 네트워크 계층 오류 → 일시 장애로 보고 재시도.
@@ -143,6 +144,10 @@ class Notifier:
                 for action in rule.actions
             ],
         }
+
+    def _build_headers(self) -> dict[str, str]:
+        """ntfy publish용 인증 헤더를 만든다."""
+        return {"Authorization": f"Bearer {self._settings.ntfy_access_token}"}
 
 
 def get_notifier(request: Request) -> Notifier:

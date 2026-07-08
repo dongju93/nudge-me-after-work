@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     # ntfy 발행 대상 (F-04). base_url은 ntfy 서버 루트, topic은 구독 주제.
     ntfy_base_url: str  # 예: https://ntfy.example.com
     ntfy_topic: str
+    ntfy_access_token: str  # ntfy publish용 Bearer 토큰
 
     # ntfy 액션 버튼이 호출할 외부 접근 가능 URL과 검증 토큰 (F-05).
     webhook_base_url: str  # 예: https://nudge.example.com
