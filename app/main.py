@@ -12,10 +12,11 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import httpx2
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from app.auth import require_admin
 from app.config import get_settings
 from app.db import init_db
 from app.notifier import Notifier
@@ -72,8 +73,9 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 # 라우터 등록. rules는 최상위(`/`, `/rules/*`), history는 `/history`를 담당한다.
-# webhooks는 `/webhooks/*` — ntfy 서버가 호출하는 F-05 엔드포인트로, F-08 관리자 인증의
-# 예외다(토큰 검증만 적용).
-app.include_router(rules.router)
-app.include_router(history.router)
+# 관리 화면인 이 둘에는 F-08 HTTP Basic 인증을 라우터 단위로 일괄 적용한다.
+# webhooks는 `/webhooks/*` — ntfy 서버가 호출하는 F-05 엔드포인트로, Basic 자격증명을
+# 실을 수 없어 관리자 인증의 **예외**다(대신 F-05의 token 쿼리 검증만 적용).
+app.include_router(rules.router, dependencies=[Depends(require_admin)])
+app.include_router(history.router, dependencies=[Depends(require_admin)])
 app.include_router(webhooks.router)

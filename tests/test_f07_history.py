@@ -300,7 +300,13 @@ def overrides_fixture(engine):
 
 
 def _client() -> AsyncClient:
-    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+    # /history는 이제 F-08 HTTP Basic 인증 뒤에 있다. overrides 픽스처가 설정한
+    # admin_password("pw")로 인증한다(사용자명은 검사하지 않으므로 임의값).
+    return AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        auth=("admin", "pw"),
+    )
 
 
 async def test_history_empty_state_when_no_rules(overrides):
