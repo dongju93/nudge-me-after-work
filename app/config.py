@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     # 관리 화면 HTTP Basic 인증 비밀번호 (F-08).
     admin_password: str
 
+    # Logfire 관측 토큰. FastAPI Cloud가 Logfire 통합 연결 시 `LOGFIRE_TOKEN`으로 주입한다.
+    # 로컬/CI에는 없는 게 정상이라 Optional로 둔다 — 토큰이 없으면 configure가 전송을
+    # 하지 않도록(send_to_logfire="if-token-present") main.py에서 처리하므로, 부재해도
+    # 기동은 실패하지 않는다.
+    logfire_token: str | None = None
+
     # 시각 판단 기준 시간대. 모든 요일/시각 비교는 이 값으로 계산한다.
     timezone: str = "Asia/Seoul"
 

@@ -8,10 +8,13 @@
 `app/templating.py`에 두고 main과 라우터가 공유한다.
 """
 
+import logging
+import sys
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import httpx2
+import logfire
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -52,6 +55,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     scheduler.start()
     app.state.scheduler = scheduler
 
+    # 기동 완료 마커. 토큰이 없으면(로컬) 전송되지 않으므로 무해하다.
+    logfire.info("앱 기동 완료 — logfire 계측 활성화", timezone=settings.timezone)
+
     yield
     # --- 종료(shutdown) ---
     # wait=False: tick이 발행 await 중이면 이벤트 루프를 블로킹해 데드락이 날 수 있으므로
@@ -60,7 +66,41 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     await ntfy_client.aclose()  # 커넥션 풀 정리
 
 
+def _configure_observability(app: FastAPI) -> None:
+    """Logfire 관측을 앱 생성 직후(요청 처리 이전) 1회 배선한다.
+
+    module 스코프에서 부르는 이유: `instrument_fastapi`는 Starlette 미들웨어 스택에
+    끼어드는데, 그 스택은 첫 ASGI 호출(=lifespan 스코프 포함) 시점에 만들어진 뒤로는
+    잠긴다. 따라서 lifespan 안에서 계측하면 "이미 시작된 앱" 오류가 난다 — app 객체가
+    만들어진 직후 여기서 건다.
+
+    - configure: 토큰은 Settings 경유(FastAPI Cloud가 LOGFIRE_TOKEN 주입). 로컬/CI엔
+      토큰이 없으므로 send_to_logfire="if-token-present"로 두면 그때는 전송을 하지 않아
+      네트워크·소음 없이 무해하게 no-op이 된다.
+    - instrument_fastapi: 요청 span(경로/상태/지연) 자동 수집.
+    - LogfireLoggingHandler: 기존 표준 logging 경로를 Logfire로 흘려보낸다. notifier/
+      scheduler가 발행 실패를 이미 WARNING/ERROR로 남기므로, 코드 수정 없이 그 신호가
+      그대로 Logfire에 잡힌다(root 기본 레벨 WARNING이라 매분 tick INFO 잡음은 제외된다).
+    - instrument_httpx는 생략한다: 이 앱은 표준 httpx가 아닌 httpx2 포크를 쓰는데,
+      OTel httpx 계측기는 표준 httpx를 패치하므로 신뢰할 수 없다. ntfy 가시성은 위
+      Notifier 로깅으로 대체된다.
+    """
+    settings = get_settings()
+    # 테스트 중엔 실제 Logfire 전송을 끈다(FakeNotifier와 같은 원칙: 테스트는 외부 호출
+    # 금지). pytest는 러너라 이 모듈 import 시점에 이미 sys.modules에 있고, 실서버 기동
+    # (fastapi dev/run)에는 없으므로 이것으로 구분한다.
+    send_to_logfire = False if "pytest" in sys.modules else "if-token-present"
+    logfire.configure(
+        token=settings.logfire_token,
+        send_to_logfire=send_to_logfire,
+        service_name="nudge-me-after-work",
+    )
+    logfire.instrument_fastapi(app)
+    logging.getLogger().addHandler(logfire.LogfireLoggingHandler())
+
+
 app = FastAPI(title="저녁 넛지 관리자", lifespan=lifespan)
+_configure_observability(app)
 
 # ntfy 웹 UI는 /nudge 경로에서 열리지만, CORS는 scheme/host/port origin 단위로 검사한다.
 app.add_middleware(
