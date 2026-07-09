@@ -49,8 +49,13 @@ async def ntfy_action(
     앱이 버튼 실패 에러를 표시하기 때문이다(UC-10).
     """
     # 1) 토큰 상수 시간 비교. 불일치 → 403. compare_digest는 early-return 타이밍으로
-    #    토큰 길이/내용이 새는 것을 막는다.
-    if not secrets.compare_digest(token, settings.webhook_token):
+    #    토큰 길이/내용이 새는 것을 막는다. 양쪽을 UTF-8 바이트로 인코딩해 비교하는 것은,
+    #    `token`이 공격자 제어 쿼리 파라미터라 비-ASCII 값이 들어오면 str 비교가
+    #    `TypeError`(→처리되지 않은 500)를 내기 때문이다 — 바이트 비교로 조용히 403에
+    #    떨어뜨린다(보안 리뷰 #4, CWE-754).
+    if not secrets.compare_digest(
+        token.encode("utf-8"), settings.webhook_token.encode("utf-8")
+    ):
         raise HTTPException(status_code=403, detail="유효하지 않은 토큰입니다.")
 
     # 2) 세션 조회. 없으면 404(잘못된 session_id, 또는 규칙 삭제로 cascade 제거된 세션).
