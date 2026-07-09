@@ -30,6 +30,10 @@
   - 알림 발행, 버튼 클릭, 자동 종료 이벤트를 세션 단위로 기록합니다.
   - 규칙별 최근 실행 결과와 완료율을 관리 화면에서 확인합니다.
 
+- 접근 보안
+  - 관리 화면은 HTTP Basic 인증으로 보호하고, 상태를 바꾸는 요청은 Origin 검사로 교차 사이트 요청(CSRF)을 차단합니다.
+  - ntfy 버튼이 호출하는 webhook은 버튼 URL에 담긴 토큰을 상수 시간 비교로 검증합니다.
+
 ## 사용 예제
 
 1. 관리 화면에서 `운동 리마인더` 같은 규칙을 만듭니다.
@@ -45,7 +49,7 @@
 - FastAPI: 관리 화면, webhook, 스케줄러를 하나의 프로세스에서 실행
 - Jinja2: 규칙 관리와 이력 확인을 위한 서버사이드 렌더링 화면
 - APScheduler: 최초 알림, 스누즈 재알림, 컷오프 종료 처리
-- SQLModel + SQLite: 규칙, 버튼 액션, 세션, 이벤트 이력 저장
+- SQLModel + SQLite/libSQL: 규칙, 버튼 액션, 세션, 이벤트 이력 저장 (로컬은 SQLite 파일, 배포는 Turso 원격 libSQL)
 - httpx2: ntfy 알림 발행용 비동기 HTTP 클라이언트
 - ntfy: 모바일 푸시 알림과 액션 버튼 제공
 
@@ -55,3 +59,13 @@
 - `RuleAction`: 알림 버튼 라벨과 완료, 스누즈, 포기 액션 정의
 - `NudgeSession`: 특정 날짜에 실행된 규칙의 진행 상태
 - `SessionEvent`: 알림 발행, 버튼 클릭, 자동 종료 같은 세션 이벤트
+
+## 배포
+
+[FastAPI Cloud](https://fastapicloud.com)에 배포되어 상시 구동됩니다. 스케줄러가 매분
+tick을 돌려야 하므로 상시 실행이 전제입니다.
+
+- 관리 화면: <https://nudge-me-after-work.fastapicloud.dev/>
+  - HTTP Basic 인증이 걸려 있어 `ADMIN_PASSWORD`로 로그인해야 접근할 수 있습니다.
+- ntfy 액션 버튼이 호출할 webhook 오리진도 같은 주소를 사용합니다
+  (`WEBHOOK_BASE_URL=https://nudge-me-after-work.fastapicloud.dev`).
