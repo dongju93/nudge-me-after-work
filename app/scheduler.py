@@ -93,7 +93,9 @@ async def tick(
     if now is None:
         now = datetime.now(ZoneInfo(settings.timezone))
 
-    logger.info("스케줄러 tick 실행 — now=%s timezone=%s", now.isoformat(), settings.timezone)
+    logger.info(
+        "스케줄러 tick 실행 — now=%s timezone=%s", now.isoformat(), settings.timezone
+    )
 
     await _trigger_first_notifications(notifier, settings, engine, now)
     await _resend_due_snoozes(notifier, engine, now)

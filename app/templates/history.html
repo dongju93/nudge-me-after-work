@@ -1,0 +1,91 @@
+{# 이력 요약 (F-07) — 설계(manage.dc.html)의 history 뷰를 서버사이드로 이식.
+   구성: 규칙 선택 탭 / 스탯 카드 4개 / 14일 캘린더 스트립 + 범례 / 세션 이력 테이블.
+   상태 색은 CSS 클래스(cal-cell--<status>, session-badge--<status>)로, 완료율 색 등급은
+   공유 매크로(m.rate_class)로 처리한다.
+   컨텍스트: rules(list[Rule]), selected_rule(Rule|None), summary(RuleHistory),
+   sessions(list[SessionRow]), status_labels, legend(list[(status, label)]), active_tab. #}
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}이력 요약 · 저녁 넛지 관리자{% endblock title %}
+{% block content %}
+    {% if not rules %}
+        <div class="empty">
+            아직 등록된 규칙이 없습니다.
+            <br />
+            먼저 <strong>+ 새 규칙</strong>으로 넛지를 만들면 여기에서 실행 이력을 볼 수 있습니다.
+        </div>
+    {% else %}
+        <div class="history">
+            {# 규칙 선택 탭 — 서버 렌더라 setState 대신 ?rule_id= 링크로 전환 #}
+            <div class="hrule-tabs">
+                {% for rule in rules %}
+                    <a class="hrule-tab {% if rule.id == selected_rule.id %}hrule-tab--active{% endif %}"
+                       href="{{ url_for('history') }}?rule_id={{ rule.id }}">{{ rule.name }}</a>
+                {% endfor %}
+            </div>
+            {# 스탯 카드 4개: 완료율(14일) / 완료 / 포기 / 무응답 #}
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <div class="stat-card__value {{ m.rate_class(summary.rate) }}">{{ '—' if summary.rate is none else summary.rate ~ '%' }}</div>
+                    <div class="stat-card__label">완료율 (14일)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card__value stat-card__value--completed">{{ summary.completed }}</div>
+                    <div class="stat-card__label">완료</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card__value stat-card__value--abandoned">{{ summary.abandoned }}</div>
+                    <div class="stat-card__label">포기</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card__value stat-card__value--no_response">{{ summary.no_response }}</div>
+                    <div class="stat-card__label">무응답</div>
+                </div>
+            </div>
+            {# 최근 14일 캘린더 스트립 + 범례 #}
+            <section class="calendar-card">
+                <div class="calendar-card__title">최근 14일</div>
+                <div class="calendar-strip">
+                    {% for cell in summary.days %}
+                        <div class="cal-day"
+                             title="{{ cell.date.strftime('%m/%d') }} · {{ status_labels[cell.status] }}">
+                            <div class="cal-cell cal-cell--{{ cell.status }}"></div>
+                            <div class="cal-label">{{ cell.weekday_label }}</div>
+                        </div>
+                    {% endfor %}
+                </div>
+                <div class="legend">
+                    {% for status, label in legend %}
+                        <div class="legend__item">
+                            <span class="legend__dot legend__dot--{{ status }}"></span>{{ label }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </section>
+            {# 세션 이력 테이블: 날짜 / 발행 시각 / 응답 / 상태 / 종료 시각 #}
+            <section class="session-table">
+                <div class="session-table__title">세션 이력</div>
+                <div class="session-table__head">
+                    <div>날짜</div>
+                    <div>발행 시각</div>
+                    <div>응답</div>
+                    <div>상태</div>
+                    <div>종료 시각</div>
+                </div>
+                {% if not sessions %}
+                    <div class="session-table__empty">최근 14일간 실행된 세션이 없습니다.</div>
+                {% else %}
+                    {% for s in sessions %}
+                        <div class="session-table__row">
+                            <div>{{ s.date_label }}</div>
+                            <div class="session-table__dim">{{ s.sent_at }}</div>
+                            <div>{{ s.response }}</div>
+                            <div><span class="session-badge session-badge--{{ s.status }}">{{ status_labels[s.status] }}</span></div>
+                            <div class="session-table__dim">{{ s.ended_at }}</div>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            </section>
+        </div>
+    {% endif %}
+{% endblock content %}

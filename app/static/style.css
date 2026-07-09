@@ -435,6 +435,32 @@ a {
   background: var(--none-bg);
 }
 
+/* 상태 막대: none은 8px 짧은 막대 유지, 나머지는 26px로 세우고 상태 색을 입힌다.
+   .bars의 align-items:flex-end 덕에 짧은 none 막대는 바닥에 붙는다(설계와 동일). */
+.bar--completed,
+.bar--abandoned,
+.bar--no_response,
+.bar--in_progress {
+  height: 26px;
+}
+
+.bar--completed {
+  background: var(--success);
+}
+
+.bar--abandoned {
+  background: var(--danger);
+}
+
+.bar--no_response {
+  background: var(--neutral);
+}
+
+.bar--in_progress {
+  background: var(--accent);
+  opacity: 0.75;
+}
+
 .rule-card__rate {
   text-align: right;
   flex: none;
@@ -445,8 +471,22 @@ a {
   font-weight: 700;
 }
 
+/* 완료율 색 등급(macros.html rate_class). .rate(목록)와 .stat-card__value(이력) 공용 —
+   글자 크기/굵기는 각 base 클래스가 정하고 여기서는 색만 얹는다. */
 .rate--none {
   color: var(--muted-2);
+}
+
+.rate--good {
+  color: var(--success);
+}
+
+.rate--mid {
+  color: var(--warning);
+}
+
+.rate--low {
+  color: var(--danger);
 }
 
 /* ── 규칙 폼 ─────────────────────────────────────────── */
@@ -708,4 +748,259 @@ a {
   padding-left: 18px;
   font-size: 12.5px;
   line-height: 1.7;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+ * F-07 이력 요약 화면
+ * ═══════════════════════════════════════════════════════════════ */
+
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 규칙 선택 탭(링크) */
+.hrule-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.hrule-tab {
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--tab-bg);
+  color: var(--muted);
+}
+
+.hrule-tab--active {
+  background: oklch(0.62 0.15 250 / 0.16);
+  color: var(--accent);
+}
+
+/* 스탯 카드 4개 */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.stat-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+
+.stat-card__value {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.stat-card__value--completed {
+  color: var(--success);
+}
+
+.stat-card__value--abandoned {
+  color: var(--danger);
+}
+
+.stat-card__value--no_response {
+  color: var(--muted-2);
+}
+
+.stat-card__label {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* 14일 캘린더 스트립 */
+.calendar-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px 24px;
+}
+
+.calendar-card__title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 14px;
+}
+
+.calendar-strip {
+  display: grid;
+  grid-template-columns: repeat(14, 1fr);
+  gap: 6px;
+}
+
+.cal-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.cal-cell {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 5px;
+  background: var(--none-bg);
+}
+
+.cal-cell--completed {
+  background: var(--success);
+}
+
+.cal-cell--abandoned {
+  background: var(--danger);
+}
+
+.cal-cell--no_response {
+  background: var(--neutral);
+}
+
+.cal-cell--in_progress {
+  background: var(--accent);
+  opacity: 0.75;
+}
+
+.cal-label {
+  font-size: 9.5px;
+  color: var(--muted-2);
+}
+
+/* 캘린더 범례 */
+.legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+  flex-wrap: wrap;
+}
+
+.legend__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: oklch(0.65 0.01 250);
+}
+
+.legend__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.legend__dot--completed {
+  background: var(--success);
+}
+
+.legend__dot--abandoned {
+  background: var(--danger);
+}
+
+.legend__dot--no_response {
+  background: var(--neutral);
+}
+
+.legend__dot--none {
+  background: var(--none-bg);
+}
+
+/* 세션 이력 테이블 */
+.session-table {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.session-table__title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 18px 24px 0;
+}
+
+/* 헤더/행 공용 5열 그리드(설계 grid-template-columns) */
+.session-table__head,
+.session-table__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.6fr 1fr 1fr;
+  align-items: center;
+}
+
+.session-table__head {
+  padding: 14px 24px 10px;
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--muted-2);
+}
+
+.session-table__row {
+  padding: 12px 24px;
+  font-size: 13px;
+  color: var(--text-dim);
+  border-top: 1px solid var(--border-soft);
+}
+
+/* 발행/종료 시각 등 보조 컬럼은 흐리게 */
+.session-table__dim {
+  color: var(--muted);
+}
+
+.session-table__empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  border-top: 1px solid var(--border-soft);
+}
+
+/* 상태 뱃지 — 상태 색을 배경(16% alpha) + 글자에 함께 쓴다 */
+.session-badge {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 6px;
+  justify-self: start;
+}
+
+.session-badge--completed {
+  background: oklch(0.65 0.15 150 / 0.16);
+  color: var(--success);
+}
+
+.session-badge--abandoned {
+  background: oklch(0.62 0.17 25 / 0.16);
+  color: var(--danger);
+}
+
+.session-badge--no_response {
+  background: oklch(0.45 0.01 250 / 0.16);
+  color: var(--muted-2);
+}
+
+.session-badge--in_progress {
+  background: oklch(0.62 0.15 250 / 0.16);
+  color: var(--accent);
+}
+
+/* 좁은 화면 대비 — 4열 스탯이 눌리지 않게 2열로 접는다 */
+@media (max-width: 640px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }

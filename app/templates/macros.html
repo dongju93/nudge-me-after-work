@@ -1,0 +1,13 @@
+{# 여러 화면이 공유하는 표시용 Jinja 매크로.
+
+   규칙 목록(F-03)과 이력 요약(F-07)이 완료율 색 등급을 똑같이 칠해야 하므로, 임계값
+   판단을 매크로 한 곳에 모아 두 템플릿의 드리프트를 막는다(설계: >=60 성공 / >=30 경고 /
+   그 외 위험 / None 무채색). 반환하는 CSS 클래스(rate--good/mid/low/none)는 style.css가
+   색을 정의한다. #}
+{% macro rate_class(rate) -%}
+    {%- if rate is none -%}rate--none
+    {%- elif rate >= 60 -%}rate--good
+    {%- elif rate >= 30 -%}rate--mid
+    {%- else -%}rate--low
+    {%- endif -%}
+{%- endmacro %}

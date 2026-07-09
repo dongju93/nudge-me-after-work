@@ -9,16 +9,19 @@ JSON API가 아니라 **HTML 폼 POST → 303 redirect**(Post/Redirect/Get) 패�
 뷰 모델 형태(`_blank_draft`/`_draft_from_rule`/`RuleForm.to_draft`)를 공유한다.
 """
 
-from datetime import time
+from datetime import datetime, time
 from typing import Annotated, Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlmodel import Session as DBSession, col, select
 
+from app.config import Settings, get_settings
 from app.db import get_db_session
 from app.models import ActionType, Rule, RuleAction
+from app.services.history import STATUS_LABELS, summarize_rule
 from app.templating import templates
 
 router = APIRouter()
@@ -365,15 +368,22 @@ def _persist_actions(db: DBSession, rule_id: int, actions: list[_ParsedAction]) 
 async def index(
     request: Request,
     db: Annotated[DBSession, Depends(get_db_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> HTMLResponse:
     """규칙 목록 (rules_list.html). base.html이 url_for('index')로 참조."""
     # col()로 감싸 pyrefly가 Rule.id를 컬럼 표현식으로 인식하게 한다(SQLModel 관용).
-    rules = db.exec(select(Rule).order_by(col(Rule.id))).all()
+    rules = list(db.exec(select(Rule).order_by(col(Rule.id))).all())
+    # 카드의 14일 미니바·완료율은 이력 화면(F-07)과 **같은 집계 함수**로 채운다(스펙 §3).
+    # "오늘"은 F-06과 동일한 기준 tz로 정해 두 화면의 윈도우가 어긋나지 않게 한다.
+    today = datetime.now(ZoneInfo(settings.timezone)).date()
+    summaries = {rule.id: summarize_rule(db, rule, today=today) for rule in rules}
     return templates.TemplateResponse(
         request,
         "rules_list.html",
         {
             "rules": rules,
+            "summaries": summaries,
+            "status_labels": STATUS_LABELS,
             "weekdays": WEEKDAYS,
             "action_type_labels": ACTION_TYPE_LABELS,
             "active_tab": "list",

@@ -3,6 +3,7 @@
    14일 미니 차트(자리표시, F-07에서 실데이터). 토글·삭제는 폼 POST다.
    컨텍스트: rules(list[Rule]), weekdays(list[(code, label)]), active_tab. #}
 {% extends "base.html" %}
+{% import "macros.html" as m %}
 {% block title %}규칙 목록 · 저녁 넛지 관리자{% endblock title %}
 {% block content %}
     {% if not rules %}
@@ -58,18 +59,22 @@
                             </div>
                         {% endfor %}
                     </div>
-                    {# 최근 14일 막대 + 완료율: F-03에서는 자리표시만. F-07에서 실데이터로 대체 #}
+                    {# 최근 14일 막대 + 완료율: 이력 화면(F-07)과 같은 집계(summaries)로 채운다.
+                       none 칸은 짧은 막대, 상태 칸은 상태 색 막대(bar--<status>). #}
+                    {% set summary = summaries[rule.id] %}
                     <div class="rule-card__stats">
                         <div>
                             <div class="rule-card__stats-label">최근 14일</div>
                             <div class="bars">
-                                {% for _ in range(14) %}
-                                    <div class="bar"></div>
+                                {% for cell in summary.days %}
+                                    <div class="bar bar--{{ cell.status }}"
+                                         title="{{ cell.date.strftime('%m/%d') }} · {{ status_labels[cell.status] }}">
+                                    </div>
                                 {% endfor %}
                             </div>
                         </div>
                         <div class="rule-card__rate">
-                            <div class="rate rate--none">—</div>
+                            <div class="rate {{ m.rate_class(summary.rate) }}">{{ '—' if summary.rate is none else summary.rate ~ '%' }}</div>
                             <div class="rule-card__stats-label">완료율</div>
                         </div>
                     </div>
