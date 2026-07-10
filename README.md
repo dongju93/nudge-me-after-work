@@ -69,3 +69,12 @@ tick을 돌려야 하므로 상시 실행이 전제입니다.
   - HTTP Basic 인증이 걸려 있어 `ADMIN_PASSWORD`로 로그인해야 접근할 수 있습니다.
 - ntfy 액션 버튼이 호출할 webhook 오리진도 같은 주소를 사용합니다
   (`WEBHOOK_BASE_URL=https://nudge-me-after-work.fastapicloud.dev`).
+
+운영 콘솔:
+
+- FastAPI Cloud 배포 현황:
+  <https://dashboard.fastapicloud.com/spdlqj011-77893206/apps/nudge-me-after-work/deployments>
+- Turso (`nudge` DB) 데이터 브라우저:
+  <https://app.turso.tech/dongju/databases/nudge/data>
+- Logfire 관측/로그:
+  <https://logfire-us.pydantic.dev/dongju93/nudge-me-after-work>
