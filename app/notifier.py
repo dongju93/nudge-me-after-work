@@ -58,12 +58,25 @@ class Notifier:
         """
         payload = self._build_payload(rule=rule, session_id=session_id, message=message)
         headers = self._build_headers()
+        logger.info(
+            "ntfy 발행 시작 — rule_id=%s session_id=%d action_count=%d",
+            rule.id,
+            session_id,
+            len(rule.actions),
+        )
 
         # 재시도 소진 시 마지막 실패 원인을 예외에 실어 보내기 위한 추적 변수.
         last_error = "원인 불명"
         last_exc: Exception | None = None
 
         for attempt in range(_MAX_RETRIES + 1):  # 0..3 → 초기 1회 + 재시도 3회
+            logger.info(
+                "ntfy 발행 요청 — rule_id=%s session_id=%d attempt=%d/%d",
+                rule.id,
+                session_id,
+                attempt + 1,
+                _MAX_RETRIES + 1,
+            )
             try:
                 response = await self._client.post(
                     self._settings.ntfy_base_url, json=payload, headers=headers
@@ -80,6 +93,15 @@ class Notifier:
                 )
             else:
                 if response.is_success:
+                    logger.info(
+                        "ntfy 발행 성공 — rule_id=%s session_id=%d status=%d "
+                        "attempt=%d/%d",
+                        rule.id,
+                        session_id,
+                        response.status_code,
+                        attempt + 1,
+                        _MAX_RETRIES + 1,
+                    )
                     return  # 정상 발행 완료. SENT 이벤트 기록은 호출자 몫.
                 if response.is_client_error:
                     # 4xx는 잘못된 topic/토큰/권한 등 설정 오류라 재시도해도 그대로 실패한다.
@@ -103,7 +125,15 @@ class Notifier:
 
             # 마지막 시도가 아니면 지수 백오프 후 재시도 (1s → 2s → 4s).
             if attempt < _MAX_RETRIES:
-                await asyncio.sleep(_BASE_BACKOFF_SECONDS * 2**attempt)
+                delay_seconds = _BASE_BACKOFF_SECONDS * 2**attempt
+                logger.info(
+                    "ntfy 발행 재시도 대기 — rule_id=%s session_id=%d "
+                    "delay_seconds=%.1f",
+                    rule.id,
+                    session_id,
+                    delay_seconds,
+                )
+                await asyncio.sleep(delay_seconds)
 
         logger.error(
             "ntfy 발행 최종 실패(재시도 %d회 소진) — %s", _MAX_RETRIES, last_error

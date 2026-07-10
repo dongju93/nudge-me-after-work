@@ -9,6 +9,7 @@ JSON API가 아니라 **HTML 폼 POST → 303 redirect**(Post/Redirect/Get) 패�
 뷰 모델 형태(`_blank_draft`/`_draft_from_rule`/`RuleForm.to_draft`)를 공유한다.
 """
 
+import logging
 from datetime import datetime, time
 from typing import Annotated, Any
 from zoneinfo import ZoneInfo
@@ -25,6 +26,7 @@ from app.services.history import STATUS_LABELS, summarize_rule
 from app.templating import templates
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # cspell:ignore ntfy
 
@@ -413,6 +415,7 @@ async def create_rule(
     draft = form.to_draft()
     errors, parsed = _validate(draft)
     if parsed is None:
+        logger.info("규칙 생성 검증 실패 — error_count=%d", len(errors))
         return templates.TemplateResponse(
             request,
             RULE_FORM_TEMPLATE,
@@ -430,8 +433,19 @@ async def create_rule(
     db.add(rule)
     db.flush()  # rule.id 확보 후 액션에 FK로 사용
     assert rule.id is not None
-    _persist_actions(db, rule.id, parsed.actions)
+    rule_id = rule.id
+    _persist_actions(db, rule_id, parsed.actions)
     db.commit()
+    logger.info(
+        "규칙 생성 완료 — rule_id=%d is_active=%s weekdays=%s start_time=%s "
+        "cutoff_time=%s action_count=%d",
+        rule_id,
+        parsed.is_active,
+        parsed.weekdays_csv,
+        parsed.start_time.isoformat(),
+        parsed.cutoff_time.isoformat(),
+        len(parsed.actions),
+    )
 
     return RedirectResponse(url=str(request.url_for("index")), status_code=303)
 
@@ -450,6 +464,7 @@ async def edit_rule(
     """기존 값을 채운 수정 폼."""
     rule = db.get(Rule, rule_id)
     if rule is None:
+        logger.warning("규칙 수정 실패 — rule_id=%d reason=not_found", rule_id)
         raise HTTPException(status_code=404, detail=RULE_NOT_FOUND_DETAIL)
     return templates.TemplateResponse(
         request,
@@ -475,11 +490,15 @@ async def update_rule(
     """규칙 수정. RuleAction은 delete-then-insert로 전체 교체(스펙 F-03 §4)."""
     rule = db.get(Rule, rule_id)
     if rule is None:
+        logger.warning("규칙 수정 실패 — rule_id=%d reason=not_found", rule_id)
         raise HTTPException(status_code=404, detail=RULE_NOT_FOUND_DETAIL)
 
     draft = form.to_draft()
     errors, parsed = _validate(draft)
     if parsed is None:
+        logger.info(
+            "규칙 수정 검증 실패 — rule_id=%d error_count=%d", rule_id, len(errors)
+        )
         return templates.TemplateResponse(
             request,
             RULE_FORM_TEMPLATE,
@@ -500,6 +519,16 @@ async def update_rule(
     db.flush()
     _persist_actions(db, rule_id, parsed.actions)
     db.commit()
+    logger.info(
+        "규칙 수정 완료 — rule_id=%d is_active=%s weekdays=%s start_time=%s "
+        "cutoff_time=%s action_count=%d",
+        rule_id,
+        parsed.is_active,
+        parsed.weekdays_csv,
+        parsed.start_time.isoformat(),
+        parsed.cutoff_time.isoformat(),
+        len(parsed.actions),
+    )
 
     return RedirectResponse(url=str(request.url_for("index")), status_code=303)
 
@@ -517,10 +546,17 @@ async def toggle_rule(
     """목록의 토글 스위치 — is_active 반전 후 목록으로 redirect (UC-03)."""
     rule = db.get(Rule, rule_id)
     if rule is None:
+        logger.warning("규칙 활성 상태 변경 실패 — rule_id=%d reason=not_found", rule_id)
         raise HTTPException(status_code=404, detail=RULE_NOT_FOUND_DETAIL)
     rule.is_active = not rule.is_active
+    is_active = rule.is_active
     db.add(rule)
     db.commit()
+    logger.info(
+        "규칙 활성 상태 변경 완료 — rule_id=%d is_active=%s",
+        rule_id,
+        is_active,
+    )
     return RedirectResponse(url=str(request.url_for("index")), status_code=303)
 
 
@@ -537,7 +573,9 @@ async def delete_rule(
     """규칙 삭제. 연관 RuleAction/세션은 cascade_delete로 함께 제거된다."""
     rule = db.get(Rule, rule_id)
     if rule is None:
+        logger.warning("규칙 삭제 실패 — rule_id=%d reason=not_found", rule_id)
         raise HTTPException(status_code=404, detail=RULE_NOT_FOUND_DETAIL)
     db.delete(rule)
     db.commit()
+    logger.info("규칙 삭제 완료 — rule_id=%d", rule_id)
     return RedirectResponse(url=str(request.url_for("index")), status_code=303)

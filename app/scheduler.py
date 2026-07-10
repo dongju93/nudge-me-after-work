@@ -64,7 +64,11 @@ def create_scheduler(*, notifier: Notifier, settings: Settings) -> AsyncIOSchedu
     scheduler = AsyncIOScheduler(timezone=ZoneInfo(settings.timezone))
 
     async def _tick_job() -> None:
-        await tick(notifier=notifier, settings=settings)
+        try:
+            await tick(notifier=notifier, settings=settings)
+        except Exception:
+            logger.exception("스케줄러 tick 예외 종료")
+            raise
 
     scheduler.add_job(
         _tick_job,
@@ -74,6 +78,12 @@ def create_scheduler(*, notifier: Notifier, settings: Settings) -> AsyncIOSchedu
         max_instances=1,
         misfire_grace_time=30,
         id=_TICK_JOB_ID,
+    )
+    logger.info(
+        "스케줄러 작업 등록 완료 — job_id=%s interval_minutes=1 timezone=%s "
+        "coalesce=true max_instances=1 misfire_grace_seconds=30",
+        _TICK_JOB_ID,
+        settings.timezone,
     )
     return scheduler
 
@@ -100,6 +110,7 @@ async def tick(
     await _trigger_first_notifications(notifier, settings, engine, now)
     await _resend_due_snoozes(notifier, engine, now)
     _close_past_cutoff(engine, now)
+    logger.info("스케줄러 tick 완료 — now=%s", now.isoformat())
 
 
 # --- (a) 최초 알림 트리거 (UC-04) -------------------------------------------
@@ -119,14 +130,47 @@ async def _trigger_first_notifications(
     grace = timedelta(minutes=settings.trigger_grace_minutes)
 
     with DBSession(engine) as db:
-        active_rules = db.exec(select(Rule).where(col(Rule.is_active).is_(True))).all()
-        for rule in active_rules:
+        rules = db.exec(select(Rule).order_by(col(Rule.id))).all()
+        logger.info(
+            "최초 알림 규칙 조회 완료 — date=%s weekday=%s rule_count=%d",
+            today.isoformat(),
+            weekday_token,
+            len(rules),
+        )
+        for rule in rules:
+            if not rule.is_active:
+                logger.info(
+                    "최초 알림 건너뜀 — rule_id=%s reason=inactive", rule.id
+                )
+                continue
             if weekday_token not in rule.weekday_list:
+                logger.info(
+                    "최초 알림 건너뜀 — rule_id=%s reason=weekday_mismatch "
+                    "today_weekday=%s configured_weekdays=%s",
+                    rule.id,
+                    weekday_token,
+                    rule.weekdays,
+                )
                 continue
             # 시작 시각을 오늘 로컬 wall-clock으로 구성해 aware now와 비교(같은 tz).
             start_dt = datetime.combine(today, rule.start_time, tzinfo=now.tzinfo)
             if not (start_dt <= now < start_dt + grace):
+                logger.info(
+                    "최초 알림 건너뜀 — rule_id=%s reason=outside_grace_window "
+                    "now=%s window_start=%s window_end=%s",
+                    rule.id,
+                    now.isoformat(),
+                    start_dt.isoformat(),
+                    (start_dt + grace).isoformat(),
+                )
                 continue
+            logger.info(
+                "최초 알림 조건 충족 — rule_id=%s now=%s window_start=%s window_end=%s",
+                rule.id,
+                now.isoformat(),
+                start_dt.isoformat(),
+                (start_dt + grace).isoformat(),
+            )
             await _open_session_and_notify(db, notifier, rule, today)
 
 
@@ -149,8 +193,17 @@ async def _open_session_and_notify(
         )
     ).first()
     if existing_session is not None:
+        logger.info(
+            "최초 알림 건너뜀 — rule_id=%d date=%s reason=session_exists "
+            "session_id=%s status=%s",
+            rule.id,
+            today.isoformat(),
+            existing_session.id,
+            existing_session.status.value,
+        )
         return
 
+    logger.info("세션 생성 시작 — rule_id=%d date=%s", rule.id, today.isoformat())
     session = NudgeSession(
         rule_id=rule.id, date=today, status=SessionStatus.IN_PROGRESS
     )
@@ -159,19 +212,46 @@ async def _open_session_and_notify(
         db.commit()  # 먼저 커밋해 세션을 durable하게 만든다(발행이 실패해도 세션은 남음).
     except IntegrityError:
         db.rollback()
+        logger.info(
+            "세션 생성 건너뜀 — rule_id=%d date=%s reason=duplicate_integrity_error",
+            rule.id,
+            today.isoformat(),
+        )
         return  # 오늘 세션이 이미 존재 → 중복 발행 방지
     except ValueError as exc:
         db.rollback()
         if _is_duplicate_session_error(exc):
+            logger.info(
+                "세션 생성 건너뜀 — rule_id=%d date=%s reason=duplicate_driver_error",
+                rule.id,
+                today.isoformat(),
+            )
             return  # libSQL/Hrana는 UNIQUE 위반을 ValueError로 올릴 수 있다.
         raise
     db.refresh(session)
     assert session.id is not None  # 방금 커밋된 세션 → PK 채워짐(타입 내로잉)
+    logger.info(
+        "세션 생성 완료 — rule_id=%d date=%s session_id=%d",
+        rule.id,
+        today.isoformat(),
+        session.id,
+    )
 
     # 커밋으로 트랜잭션을 닫은 뒤 발행한다 — 느린 네트워크 await 동안 쓰기 락을 쥐지 않게.
     if await _publish(notifier, rule=rule, session_id=session.id, message=rule.message):
         db.add(SessionEvent(session_id=session.id, event_type=EventType.SENT))
         db.commit()
+        logger.info(
+            "최초 알림 SENT 기록 완료 — rule_id=%d session_id=%d",
+            rule.id,
+            session.id,
+        )
+    else:
+        logger.warning(
+            "최초 알림 SENT 미기록 — rule_id=%d session_id=%d reason=publish_failed",
+            rule.id,
+            session.id,
+        )
 
 
 def _is_duplicate_session_error(error: BaseException) -> bool:
@@ -206,21 +286,53 @@ async def _resend_due_snoozes(
                 col(NudgeSession.next_notify_at) <= now_utc_naive,
             )
         ).all()
+        logger.info(
+            "스누즈 재발송 대상 조회 완료 — now_utc=%s due_count=%d",
+            now_utc_naive.isoformat(),
+            len(due),
+        )
         for session in due:
             # 발행 직전 상태 재확인(PRD §3.6). 위 WHERE로 이미 IN_PROGRESS만 골랐지만,
             # "이미 종료됐으면 발행하지 않음" 불변식을 발행 지점에서 명시적으로 지킨다.
             if session.status != SessionStatus.IN_PROGRESS:
+                logger.info(
+                    "스누즈 재발송 건너뜀 — session_id=%s status=%s",
+                    session.id,
+                    session.status.value,
+                )
                 continue
             assert session.id is not None  # 조회된 영속 세션 → PK 존재(타입 내로잉)
+            rule_id = session.rule_id
+            session_id = session.id
             message = session.next_message or session.rule.message
+            logger.info(
+                "스누즈 재발송 시작 — rule_id=%d session_id=%d scheduled_at=%s",
+                rule_id,
+                session_id,
+                session.next_notify_at.isoformat()
+                if session.next_notify_at is not None
+                else None,
+            )
             if await _publish(
-                notifier, rule=session.rule, session_id=session.id, message=message
+                notifier, rule=session.rule, session_id=session_id, message=message
             ):
                 session.next_notify_at = None
                 session.next_message = None
                 db.add(session)
-                db.add(SessionEvent(session_id=session.id, event_type=EventType.SENT))
+                db.add(SessionEvent(session_id=session_id, event_type=EventType.SENT))
                 db.commit()
+                logger.info(
+                    "스누즈 재발송 완료 — rule_id=%d session_id=%d",
+                    rule_id,
+                    session_id,
+                )
+            else:
+                logger.warning(
+                    "스누즈 재발송 실패 — rule_id=%d session_id=%d "
+                    "reason=publish_failed retry=next_tick",
+                    rule_id,
+                    session_id,
+                )
 
 
 # --- (c) 컷오프 자동 종료 (UC-09) -------------------------------------------
@@ -239,12 +351,25 @@ def _close_past_cutoff(engine: Engine, now: datetime) -> None:
                 col(NudgeSession.status) == SessionStatus.IN_PROGRESS
             )
         ).all()
+        logger.info(
+            "컷오프 검사 대상 조회 완료 — now=%s in_progress_count=%d",
+            now.isoformat(),
+            len(in_progress),
+        )
         closed_any = False
+        closed_count = 0
         for session in in_progress:
             cutoff_dt = datetime.combine(
                 session.date, session.rule.cutoff_time, tzinfo=now.tzinfo
             )
             if now < cutoff_dt:
+                logger.info(
+                    "컷오프 종료 건너뜀 — session_id=%s rule_id=%d now=%s cutoff=%s",
+                    session.id,
+                    session.rule_id,
+                    now.isoformat(),
+                    cutoff_dt.isoformat(),
+                )
                 continue
             assert session.id is not None  # 조회된 영속 세션 → PK 존재(타입 내로잉)
             auto_close_no_response(session)
@@ -253,8 +378,16 @@ def _close_past_cutoff(engine: Engine, now: datetime) -> None:
                 SessionEvent(session_id=session.id, event_type=EventType.AUTO_CLOSED)
             )
             closed_any = True
+            closed_count += 1
+            logger.info(
+                "컷오프 자동 종료 적용 — session_id=%d rule_id=%d cutoff=%s",
+                session.id,
+                session.rule_id,
+                cutoff_dt.isoformat(),
+            )
         if closed_any:
             db.commit()
+        logger.info("컷오프 검사 완료 — closed_count=%d", closed_count)
 
 
 async def _publish(
@@ -265,11 +398,21 @@ async def _publish(
     `NtfyPublishError`(재시도 소진/설정 오류)를 여기서 삼켜 tick이 멈추지 않게 한다
     (스펙 §4: "다음 tick을 막지 않는 것이 우선"). 성공 시에만 True → 호출자가 SENT 기록.
     """
+    logger.info(
+        "알림 발행 호출 — rule_id=%s session_id=%d", rule.id, session_id
+    )
     try:
         await notifier.publish(rule=rule, session_id=session_id, message=message)
+        logger.info(
+            "알림 발행 호출 성공 — rule_id=%s session_id=%d", rule.id, session_id
+        )
         return True
-    except NtfyPublishError:
+    except NtfyPublishError as exc:
         logger.error(
-            "ntfy 발행 실패 — session_id=%s (로그만 남기고 tick 계속)", session_id
+            "ntfy 발행 실패 — rule_id=%s session_id=%d reason=%s "
+            "(로그만 남기고 tick 계속)",
+            rule.id,
+            session_id,
+            exc,
         )
         return False
