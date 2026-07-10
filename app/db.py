@@ -1,8 +1,8 @@
 """DB 엔진 · 초기화 · 세션 의존성 (F-02).
 
 Turso 환경 변수가 있으면 원격 libSQL DB를 쓰고, 없으면 로컬 SQLite 파일을 쓴다.
-엔진은 모듈 전역으로 1개만 만들어 커넥션 풀을 재사용하고, 스키마 생성(`init_db`)은
-lifespan 기동 시 1회 호출한다.
+엔진은 모듈 전역으로 1개만 만들되, Turso는 만료된 Hrana 스트림 재사용을 막기 위해
+커넥션 풀을 쓰지 않는다. 스키마 생성(`init_db`)은 lifespan 기동 시 1회 호출한다.
 """
 
 from collections.abc import Iterator
@@ -10,6 +10,7 @@ from pathlib import Path
 
 from sqlalchemy import event
 from sqlalchemy.engine import make_url
+from sqlalchemy.pool import NullPool
 from sqlmodel import Session as DBSession, SQLModel, create_engine
 
 # 모델 모듈을 반드시 import해야 SQLModel.metadata에 테이블 4종이 등록된다.
@@ -50,7 +51,14 @@ def _build_engine_config() -> tuple[str, dict[str, object]]:
 _database_url, _connect_args = _build_engine_config()
 _uses_turso = bool(_settings.turso_conn and _settings.turso_token)
 
-engine = create_engine(_database_url, connect_args=_connect_args)
+if _uses_turso:
+    engine = create_engine(
+        _database_url,
+        connect_args=_connect_args,
+        poolclass=NullPool,
+    )
+else:
+    engine = create_engine(_database_url, connect_args=_connect_args)
 
 
 @event.listens_for(engine, "connect")

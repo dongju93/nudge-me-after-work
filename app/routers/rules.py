@@ -546,7 +546,9 @@ async def toggle_rule(
     """목록의 토글 스위치 — is_active 반전 후 목록으로 redirect (UC-03)."""
     rule = db.get(Rule, rule_id)
     if rule is None:
-        logger.warning("규칙 활성 상태 변경 실패 — rule_id=%d reason=not_found", rule_id)
+        logger.warning(
+            "규칙 활성 상태 변경 실패 — rule_id=%d reason=not_found", rule_id
+        )
         raise HTTPException(status_code=404, detail=RULE_NOT_FOUND_DETAIL)
     rule.is_active = not rule.is_active
     is_active = rule.is_active

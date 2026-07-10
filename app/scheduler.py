@@ -139,9 +139,7 @@ async def _trigger_first_notifications(
         )
         for rule in rules:
             if not rule.is_active:
-                logger.info(
-                    "최초 알림 건너뜀 — rule_id=%s reason=inactive", rule.id
-                )
+                logger.info("최초 알림 건너뜀 — rule_id=%s reason=inactive", rule.id)
                 continue
             if weekday_token not in rule.weekday_list:
                 logger.info(
@@ -398,9 +396,7 @@ async def _publish(
     `NtfyPublishError`(재시도 소진/설정 오류)를 여기서 삼켜 tick이 멈추지 않게 한다
     (스펙 §4: "다음 tick을 막지 않는 것이 우선"). 성공 시에만 True → 호출자가 SENT 기록.
     """
-    logger.info(
-        "알림 발행 호출 — rule_id=%s session_id=%d", rule.id, session_id
-    )
+    logger.info("알림 발행 호출 — rule_id=%s session_id=%d", rule.id, session_id)
     try:
         await notifier.publish(rule=rule, session_id=session_id, message=message)
         logger.info(
