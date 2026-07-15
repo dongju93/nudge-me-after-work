@@ -23,6 +23,7 @@ from app.auth import require_admin
 from app.config import get_settings
 from app.csrf import verify_origin
 from app.db import init_db
+from app.diagnostics import install_shutdown_probe, shutdown_cause_line, snapshot_line
 from app.notifier import Notifier
 from app.routers import history, rules, webhooks
 from app.scheduler import create_scheduler
@@ -47,6 +48,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         settings.timezone,
         settings.trigger_grace_minutes,
     )
+    # issue #1: 예고 없는 종료의 원인을 남기려면 uvicorn이 이미 건 시그널 핸들러 앞에
+    # 로깅을 끼워야 한다. lifespan 기동은 uvicorn의 capture_signals() **안쪽**이라
+    # 여기가 그 체이닝을 걸 수 있는 시점이다.
+    install_shutdown_probe()
     init_db()  # data/nudge.db에 테이블 4종 생성(idempotent). 없으면 디렉터리도 생성.
     logger.info("DB 초기화 완료")
 
@@ -76,10 +81,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # --- 종료(shutdown) ---
     # wait=False: tick이 발행 await 중이면 이벤트 루프를 블로킹해 데드락이 날 수 있으므로
     # 완료를 기다리지 않고 즉시 잡 실행을 멈춘다. 예약 상태는 DB에 있어 유실되지 않는다.
-    logger.info("앱 종료 시작 — 스케줄러와 ntfy 클라이언트 정리")
+    # 종료 로그에 원인 근거를 함께 남긴다(issue #1) — 이 줄만으로 "시그널을 받아서
+    # 종료했는가, 아니면 시그널 없이 서버 내부에서 종료가 시작됐는가"가 갈린다.
+    logger.warning(
+        "앱 종료 시작 — 스케줄러와 ntfy 클라이언트 정리 %s %s",
+        shutdown_cause_line(),
+        snapshot_line(),
+    )
     scheduler.shutdown(wait=False)
     await ntfy_client.aclose()  # 커넥션 풀 정리
-    logger.info("앱 종료 완료")
+    logger.info("앱 종료 완료 — %s", snapshot_line())
 
 
 def _configure_observability(app: FastAPI) -> None:

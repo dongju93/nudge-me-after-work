@@ -28,6 +28,7 @@ from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session as DBSession, col, select
 
+from app import diagnostics
 from app.config import Settings
 from app.db import engine as default_engine
 from app.models import (
@@ -110,7 +111,12 @@ async def tick(
     await _trigger_first_notifications(notifier, settings, engine, now)
     await _resend_due_snoozes(notifier, engine, now)
     _close_past_cutoff(engine, now)
-    logger.info("스케줄러 tick 완료 — now=%s", now.isoformat())
+    # 스냅샷을 여기 붙이는 이유(issue #1): 매분 도는 이 줄이 종료 직전 마지막 로그였다.
+    # 여기에 RSS/가동시간을 실어두면 종료 시점까지의 메모리 추세를 사후에 볼 수 있어,
+    # 메모리 압박 가설을 확정하거나 배제할 수 있다.
+    logger.info(
+        "스케줄러 tick 완료 — now=%s %s", now.isoformat(), diagnostics.snapshot_line()
+    )
 
 
 # --- (a) 최초 알림 트리거 (UC-04) -------------------------------------------
