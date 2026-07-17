@@ -1,15 +1,14 @@
 services:
   nudge:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: nudge-me-after-work:local
+    # compose는 Docker Hub에서 이미지를 pull해 구동만 한다(빌드는 buildx --push가 담당).
+    # latest 고정: 항상 최신 이미지를 참조하고, 버전 태그는 릴리스·롤백용으로만 push한다.
+    image: docker.io/tls2323/nudge-me-after-work:latest
     container_name: nudge-me-after-work
     restart: unless-stopped
     env_file:
       - .env
     ports:
-      - "127.0.0.1:8000:8000"
+      - "0.0.0.0:8000:8000"
     volumes:
       # 이름 있는 볼륨: 이미지의 /data(app:app) 소유권을 물려받아 비루트(uid 10001)로도
       # 바로 쓸 수 있다. bind 마운트였다면 호스트 디렉터리를 직접 chown해야 한다.
