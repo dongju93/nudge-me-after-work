@@ -101,9 +101,9 @@ def _configure_observability(app: FastAPI) -> None:
     잠긴다. 따라서 lifespan 안에서 계측하면 "이미 시작된 앱" 오류가 난다 — app 객체가
     만들어진 직후 여기서 건다.
 
-    - configure: 토큰은 Settings 경유(FastAPI Cloud가 LOGFIRE_TOKEN 주입). 로컬/CI엔
-      토큰이 없으므로 send_to_logfire="if-token-present"로 두면 그때는 전송을 하지 않아
-      네트워크·소음 없이 무해하게 no-op이 된다.
+    - configure: 토큰은 Settings 경유로 주입한다. 토큰이 없으면
+      send_to_logfire="if-token-present"가 전송하지 않아 네트워크·소음 없이 무해하게
+      no-op이 된다.
     - instrument_fastapi: 요청 span(경로/상태/지연) 자동 수집.
     - LogfireLoggingHandler: 기존 표준 logging 경로를 Logfire로 흘려보낸다. `app` 로거를
       INFO로 설정해 규칙 변경, 매분 tick 판정, ntfy 발행, webhook 액션 처리까지 추적한다.

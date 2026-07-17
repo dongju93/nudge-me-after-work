@@ -222,16 +222,6 @@ async def _open_session_and_notify(
             today.isoformat(),
         )
         return  # 오늘 세션이 이미 존재 → 중복 발행 방지
-    except ValueError as exc:
-        db.rollback()
-        if _is_duplicate_session_error(exc):
-            logger.info(
-                "세션 생성 건너뜀 — rule_id=%d date=%s reason=duplicate_driver_error",
-                rule.id,
-                today.isoformat(),
-            )
-            return  # libSQL/Hrana는 UNIQUE 위반을 ValueError로 올릴 수 있다.
-        raise
     db.refresh(session)
     assert session.id is not None  # 방금 커밋된 세션 → PK 채워짐(타입 내로잉)
     logger.info(
@@ -256,16 +246,6 @@ async def _open_session_and_notify(
             rule.id,
             session.id,
         )
-
-
-def _is_duplicate_session_error(error: BaseException) -> bool:
-    """드라이버별 UNIQUE 위반 메시지를 오늘 세션 중복으로 식별한다."""
-    message = str(error)
-    return (
-        "UNIQUE constraint failed: sessions.rule_id, sessions.date" in message
-        or "uq_sessions_rule_date" in message
-    )
-
 
 # --- (b) 스누즈 재발송 (UC-06) ----------------------------------------------
 

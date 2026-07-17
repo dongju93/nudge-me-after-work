@@ -1,8 +1,7 @@
 """DB 엔진 · 초기화 · 세션 의존성 (F-02).
 
-Turso 환경 변수가 있으면 원격 libSQL DB를 쓰고, 없으면 로컬 SQLite 파일을 쓴다.
-엔진은 모듈 전역으로 1개만 만들되, Turso는 만료된 Hrana 스트림 재사용을 막기 위해
-커넥션 풀을 쓰지 않는다. 스키마 생성(`init_db`)은 lifespan 기동 시 1회 호출한다.
+로컬 SQLite 파일을 사용하는 엔진을 모듈 전역으로 1개만 만든다.
+스키마 생성(`init_db`)은 lifespan 기동 시 1회 호출한다.
 """
 
 from collections.abc import Iterator
@@ -10,7 +9,6 @@ from pathlib import Path
 
 from sqlalchemy import event
 from sqlalchemy.engine import make_url
-from sqlalchemy.pool import NullPool
 from sqlmodel import Session as DBSession, SQLModel, create_engine
 
 # 모델 모듈을 반드시 import해야 SQLModel.metadata에 테이블 4종이 등록된다.
@@ -20,50 +18,17 @@ from app.config import get_settings
 
 _settings = get_settings()
 
-
-def _build_engine_config() -> tuple[str, dict[str, object]]:
-    """설정에서 SQLAlchemy URL과 드라이버별 connect_args를 만든다."""
-    if _settings.turso_conn or _settings.turso_token:
-        if not _settings.turso_conn or not _settings.turso_token:
-            raise ValueError("TURSO_CONN and TURSO_TOKEN must be set together.")
-
-        turso_conn = _settings.turso_conn.strip()
-        if turso_conn.startswith("sqlite+libsql://"):
-            database_url = turso_conn
-        elif turso_conn.startswith("libsql://"):
-            database_url = f"sqlite+{turso_conn}"
-        else:
-            raise ValueError(
-                "TURSO_CONN must start with libsql:// or sqlite+libsql://."
-            )
-
-        if "secure=" not in database_url:
-            separator = "&" if "?" in database_url else "?"
-            database_url = f"{database_url}{separator}secure=true"
-
-        return database_url, {"auth_token": _settings.turso_token}
-
-    # check_same_thread=False: 스케줄러 스레드에서 만든 커넥션을 웹 요청 스레드가 써도
-    # SQLite가 막지 않도록 한다. 단일 프로세스이므로 경합은 WAL + 짧은 트랜잭션으로 흡수한다.
-    return _settings.database_url, {"check_same_thread": False}
-
-
-_database_url, _connect_args = _build_engine_config()
-_uses_turso = bool(_settings.turso_conn and _settings.turso_token)
-
-if _uses_turso:
-    engine = create_engine(
-        _database_url,
-        connect_args=_connect_args,
-        poolclass=NullPool,
-    )
-else:
-    engine = create_engine(_database_url, connect_args=_connect_args)
+# check_same_thread=False: 스케줄러 스레드에서 만든 커넥션을 웹 요청 스레드가 써도
+# SQLite가 막지 않도록 한다. 단일 프로세스이므로 경합은 WAL + 짧은 트랜잭션으로 흡수한다.
+engine = create_engine(
+    _settings.database_url,
+    connect_args={"check_same_thread": False},
+)
 
 
 @event.listens_for(engine, "connect")
 def _set_sqlite_pragma(dbapi_connection: object, _connection_record: object) -> None:
-    """새 SQLite/libSQL 커넥션마다 PRAGMA를 건다.
+    """새 SQLite 커넥션마다 PRAGMA를 건다.
 
     - foreign_keys=ON: SQLite 계열은 기본으로 FK를 강제하지 않는다. 켜야 models.py의
       ondelete=CASCADE가 DB 수준에서도 동작하고, 잘못된 rule_id 삽입이 차단된다.
@@ -72,8 +37,7 @@ def _set_sqlite_pragma(dbapi_connection: object, _connection_record: object) -> 
     """
     cursor = dbapi_connection.cursor()  # type: ignore[attr-defined]
     cursor.execute("PRAGMA foreign_keys=ON")
-    if not _uses_turso:
-        cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA journal_mode=WAL")
     cursor.close()
 
 
@@ -83,13 +47,12 @@ def init_db() -> None:
     `create_all`은 이미 존재하는 테이블은 건드리지 않으므로 재기동 시 안전하게
     반복 호출할 수 있다(idempotent). Alembic은 첫 스키마 변경 시점에 도입한다.
     """
-    if not _uses_turso:
-        # sqlite:///./data/nudge.db → database="./data/nudge.db". 상위 디렉터리가 없으면
-        # SQLite가 파일을 못 만들어 "unable to open database file"로 실패하므로 미리 만든다.
-        # (:memory: 등 파일이 아닌 DB는 database가 비어 있어 건너뛴다.)
-        db_path = make_url(_database_url).database
-        if db_path and db_path != ":memory:":
-            Path(db_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
+    # sqlite:///./data/nudge.db → database="./data/nudge.db". 상위 디렉터리가 없으면
+    # SQLite가 파일을 못 만들어 "unable to open database file"로 실패하므로 미리 만든다.
+    # (:memory: 등 파일이 아닌 DB는 database가 비어 있어 건너뛴다.)
+    db_path = make_url(_settings.database_url).database
+    if db_path and db_path != ":memory:":
+        Path(db_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
 
     SQLModel.metadata.create_all(engine)
 
