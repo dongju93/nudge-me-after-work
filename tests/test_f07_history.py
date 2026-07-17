@@ -97,13 +97,18 @@ def _add_session(
     *,
     on: date,
     status: SessionStatus,
+    scheduled_start_time: time = time(20, 0),
     ended_at: datetime | None = None,
     events: list[tuple[EventType, str | None, datetime]] | None = None,
 ) -> int:
     """세션 1개(+선택 이벤트)를 만들어 session_id를 돌려준다."""
     with DBSession(engine) as db:
         session = NudgeSession(
-            rule_id=rule_id, date=on, status=status, ended_at=ended_at
+            rule_id=rule_id,
+            date=on,
+            scheduled_start_time=scheduled_start_time,
+            status=status,
+            ended_at=ended_at,
         )
         db.add(session)
         db.flush()
@@ -195,6 +200,33 @@ def test_empty_days_render_as_none_cells(engine):
     none_cells = [cell for cell in summary.days if cell.status == "none"]
     assert len(none_cells) == 13  # 오늘 1일만 세션 → 나머지 13일은 none
     assert summary.days[-1].status == SessionStatus.COMPLETED.value
+
+
+def test_multiple_sessions_on_same_day_are_all_counted(engine):
+    """같은 날 시작 시각이 다른 세션은 모두 집계하고 셀에는 마지막 상태를 표시한다."""
+    rule_id = _make_rule(engine)
+    _add_session(
+        engine,
+        rule_id,
+        on=TODAY,
+        scheduled_start_time=time(20, 0),
+        status=SessionStatus.COMPLETED,
+    )
+    _add_session(
+        engine,
+        rule_id,
+        on=TODAY,
+        scheduled_start_time=time(20, 5),
+        status=SessionStatus.ABANDONED,
+    )
+
+    with DBSession(engine) as db:
+        summary = summarize_rule(db, _get_rule(db, rule_id), today=TODAY)
+
+    assert summary.completed == 1
+    assert summary.abandoned == 1
+    assert summary.rate == 50
+    assert summary.days[-1].status == SessionStatus.ABANDONED.value
 
 
 # --- 세션 이력 테이블 단위 테스트 ------------------------------------------

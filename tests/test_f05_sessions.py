@@ -106,6 +106,7 @@ def _make_session(db: DBSession, rule: Rule) -> NudgeSession:
     session = NudgeSession(
         rule_id=_require_id(rule.id),
         date=date(2026, 7, 8),
+        scheduled_start_time=rule.start_time,
         status=SessionStatus.IN_PROGRESS,
     )
     db.add(session)

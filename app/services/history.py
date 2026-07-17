@@ -96,7 +96,7 @@ def _window_dates(today: date, window_days: int) -> list[date]:
 def _sessions_in_window(
     db: DBSession, rule_id: int, *, window_start: date, today: date
 ) -> list[NudgeSession]:
-    """규칙의 [window_start, today] 세션을 조회한다(날짜 오름차순)."""
+    """규칙의 [window_start, today] 세션을 조회한다(날짜·시작 시각 오름차순)."""
     return list(
         db.exec(
             select(NudgeSession)
@@ -105,7 +105,11 @@ def _sessions_in_window(
                 col(NudgeSession.date) >= window_start,
                 col(NudgeSession.date) <= today,
             )
-            .order_by(col(NudgeSession.date))
+            .order_by(
+                col(NudgeSession.date),
+                col(NudgeSession.scheduled_start_time),
+                col(NudgeSession.id),
+            )
         ).all()
     )
 
@@ -129,17 +133,20 @@ def summarize_rule(
     assert rule.id is not None
     dates = _window_dates(today, window_days)
     sessions = _sessions_in_window(db, rule.id, window_start=dates[0], today=today)
-    # uq_sessions_rule_date로 (rule, date)당 세션 1개가 보장되므로 날짜 키 매핑이 안전하다.
+    # 하루에 여러 세션이 있으면 캘린더 셀에는 가장 늦은 시작 시각의 상태를 표시한다.
+    # 통계는 아래에서 모든 세션을 집계한다.
     by_date = {session.date: session for session in sessions}
 
     days: list[DayCell] = []
-    completed = abandoned = no_response = in_progress = 0
     for day in dates:
         session = by_date.get(day)
         if session is None:
             days.append(DayCell(date=day, status=NONE_CELL))
             continue
         days.append(DayCell(date=day, status=session.status.value))
+
+    completed = abandoned = no_response = in_progress = 0
+    for session in sessions:
         match session.status:
             case SessionStatus.COMPLETED:
                 completed += 1
