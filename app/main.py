@@ -153,3 +153,10 @@ app.include_router(
 )
 app.include_router(history.router, dependencies=[Depends(require_admin)])
 app.include_router(webhooks.router)
+
+
+# 컨테이너 HEALTHCHECK용 경량 liveness 엔드포인트. 인증/DB 접근 없이 프로세스가
+# 요청을 받을 수 있는지만 확인한다(준비 상태 판정을 /docs 활성화 여부에 묶지 않기 위함).
+@app.get("/health", include_in_schema=False)
+def health() -> dict[str, str]:
+    return {"status": "ok"}

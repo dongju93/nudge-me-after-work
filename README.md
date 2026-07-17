@@ -49,8 +49,8 @@
 - FastAPI: 관리 화면, webhook, 스케줄러를 하나의 프로세스에서 실행
 - Jinja2: 규칙 관리와 이력 확인을 위한 서버사이드 렌더링 화면
 - APScheduler: 최초 알림, 스누즈 재알림, 컷오프 종료 처리
-- SQLModel + SQLite/libSQL: 규칙, 버튼 액션, 세션, 이벤트 이력 저장 (로컬은 SQLite 파일, 배포는 Turso 원격 libSQL)
-- httpx2: ntfy 알림 발행용 비동기 HTTP 클라이언트
+- SQLModel + SQLite: 규칙, 버튼 액션, 세션, 이벤트 이력 저장 (로컬·배포 모두 단일 SQLite 파일, 로컬 파일에는 WAL 모드 적용)
+- httpx: ntfy 알림 발행용 비동기 HTTP 클라이언트
 - ntfy: 모바일 푸시 알림과 액션 버튼 제공
 
 ## 데이터 모델
