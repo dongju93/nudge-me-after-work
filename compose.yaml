@@ -1,0 +1,19 @@
+services:
+  nudge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nudge-me-after-work:local
+    container_name: nudge-me-after-work
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - /srv/nudge-me-after-work/data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
