@@ -60,21 +60,73 @@
 - `NudgeSession`: 특정 날짜에 실행된 규칙의 진행 상태
 - `SessionEvent`: 알림 발행, 버튼 클릭, 자동 종료 같은 세션 이벤트
 
-## 배포
+## 배포 (Docker)
 
-[FastAPI Cloud](https://fastapicloud.com)에 배포되어 상시 구동됩니다. 스케줄러가 매분
-tick을 돌려야 하므로 상시 실행이 전제입니다.
+단일 컨테이너를 자가호스팅(예: 라즈베리파이)으로 상시 구동합니다. 스케줄러가 매분
+tick을 돌려야 하므로 상시 실행이 전제이며, `restart: unless-stopped`로 재부팅·크래시
+후 자동 복귀합니다. 진행 중 세션과 스누즈 상태는 스케줄러 잡이 아니라 DB 행에 있으므로
+컨테이너를 재기동해도 볼륨의 SQLite 파일에서 그대로 복원됩니다.
 
-- 관리 화면: <https://nudge-me-after-work.fastapicloud.dev/>
-  - HTTP Basic 인증이 걸려 있어 `ADMIN_PASSWORD`로 로그인해야 접근할 수 있습니다.
-- ntfy 액션 버튼이 호출할 webhook 오리진도 같은 주소를 사용합니다
-  (`WEBHOOK_BASE_URL=https://nudge-me-after-work.fastapicloud.dev`).
+### 1. 환경 변수 준비
 
-운영 콘솔:
+`.env.example`을 복사해 실제 값을 채웁니다. compose가 `env_file: .env`로 주입하며,
+`NTFY_*`·`WEBHOOK_*`·`ADMIN_PASSWORD`가 비어 있으면 앱이 부팅에서 즉시 실패합니다.
 
-- FastAPI Cloud 배포 현황:
-  <https://dashboard.fastapicloud.com/spdlqj011-77893206/apps/nudge-me-after-work/deployments>
-- Turso (`nudge` DB) 데이터 브라우저:
-  <https://app.turso.tech/dongju/databases/nudge/data>
-- Logfire 관측/로그:
-  <https://logfire-us.pydantic.dev/dongju93/nudge-me-after-work>
+```bash
+cp .env.example .env
+# NTFY_ACCESS_TOKEN, ADMIN_PASSWORD 채우기
+# WEBHOOK_TOKEN 은 임의 문자열로: openssl rand -hex 16
+# WEBHOOK_BASE_URL 은 ntfy 버튼이 외부에서 접근할 이 앱의 공개 URL
+```
+
+`DATABASE_URL`은 `.env`에 넣지 않습니다. Docker는 이미지 기본값 `sqlite:////data/nudge.db`
+(볼륨 절대경로), 로컬 개발은 코드 기본값 `./data/nudge.db`를 각자 적용합니다. compose의
+`env_file: .env`는 여기 적힌 값을 이미지 `ENV`보다 우선 주입하므로, 상대경로를 채워 넣으면
+볼륨(`/data`) 밖에 기록됩니다.
+
+### 2. 빌드 및 실행
+
+```bash
+docker compose build          # 멀티스테이지 빌드(uv builder → slim 런타임)
+docker compose up -d          # 백그라운드 상시 구동
+docker compose logs -f        # 로그 추적(json-file, 10MB×3 로테이션)
+docker compose ps             # 헬스체크 포함 상태 확인
+```
+
+빌드만 따로: `docker build -t nudge-me-after-work:local .`
+
+### 3. 데이터 지속성
+
+SQLite 파일은 named volume `nudge-data`에 저장됩니다. 이미지가 `/data`를 앱 사용자
+(uid 10001) 소유로 만들어 두므로 비루트 프로세스가 bind 마운트 chown 없이 바로 씁니다.
+컨테이너를 지워도 볼륨은 남습니다.
+
+```bash
+docker compose down           # 컨테이너 제거(볼륨 유지)
+docker compose down -v        # 볼륨까지 제거(모든 규칙·이력 삭제 — 주의)
+# 백업: 로컬 SQLite는 WAL 모드라 구동 중 .db만 복사하면 최신 커밋을 놓칠 수 있으니
+# 먼저 `docker compose stop` 후 복사하는 편이 안전합니다
+docker run --rm -v nudge-data:/data -v "$PWD":/backup alpine \
+  cp /data/nudge.db /backup/nudge-backup.db
+```
+
+### 4. 헬스체크 · TLS
+
+- 컨테이너 HEALTHCHECK는 인증·DB 없이 프로세스 응답만 확인하는 `GET /health`를 씁니다.
+- 포트는 `127.0.0.1:8000`에만 바인딩됩니다. 관리 화면·webhook을 외부에 공개하려면
+  앞단(Cloudflare Tunnel, Caddy 등)에서 TLS를 종단하세요. HTTP Basic 자격증명은 base64
+  인코딩일 뿐 암호화가 아니므로 평문 HTTP로 공개하면 안 됩니다.
+
+### 5. 업데이트
+
+```bash
+git pull
+docker compose up -d --build  # 재빌드 후 무중단에 가깝게 교체(볼륨 데이터는 유지)
+```
+
+### 관측 (선택)
+
+`LOGFIRE_TOKEN`을 채우면 Logfire로 로그·트레이스를 전송합니다. 비워두면 Docker 로그만
+사용합니다.
+
+- Logfire 대시보드: <https://logfire-us.pydantic.dev/dongju93/nudge-me-after-work>
