@@ -247,6 +247,7 @@ async def _open_session_and_notify(
             session.id,
         )
 
+
 # --- (b) 스누즈 재발송 (UC-06) ----------------------------------------------
 
 

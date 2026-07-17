@@ -142,16 +142,19 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 
 # 라우터 등록. rules는 최상위(`/`, `/rules/*`), history는 `/history`를 담당한다.
 # 관리 화면인 이 둘에는 F-08 HTTP Basic 인증을 라우터 단위로 일괄 적용한다.
-# rules에는 추가로 `verify_origin`(CSRF, 보안 리뷰 #2)을 건다 — Basic 자격증명은
-# 브라우저가 교차 사이트 요청에 자동 재전송하므로, 상태 변경 POST의 출처를 검증해야
-# 한다. history는 GET 전용(상태 변경 없음)이라 인증만으로 충분하다. 의존성은 나열
-# 순서대로 실행되므로 인증(require_admin) → 출처검증(verify_origin) 순으로 둔다.
+# 둘 다 상태 변경 POST를 가지므로(rules: 생성/수정/토글/삭제, history: 세션 강제 종료)
+# `verify_origin`(CSRF, 보안 리뷰 #2)도 함께 건다 — Basic 자격증명은 브라우저가 교차
+# 사이트 요청에 자동 재전송하므로, 상태 변경 POST의 출처를 검증해야 한다. verify_origin은
+# 안전 메서드(GET/HEAD/OPTIONS)를 건너뛰므로 history의 이력 조회 GET에는 영향이 없다.
+# 의존성은 나열 순서대로 실행되므로 인증(require_admin) → 출처검증(verify_origin) 순으로 둔다.
 # webhooks는 `/webhooks/*` — ntfy 서버가 호출하는 F-05 엔드포인트로, Basic 자격증명도
 # Origin 헤더도 실을 수 없어 두 통제의 **예외**다(대신 F-05의 token 쿼리 검증만 적용).
 app.include_router(
     rules.router, dependencies=[Depends(require_admin), Depends(verify_origin)]
 )
-app.include_router(history.router, dependencies=[Depends(require_admin)])
+app.include_router(
+    history.router, dependencies=[Depends(require_admin), Depends(verify_origin)]
+)
 app.include_router(webhooks.router)
 
 

@@ -271,6 +271,7 @@ async def test_first_notification_not_duplicated(engine):
     assert len(_sessions(engine)) == 1
     assert len(notifier.calls) == 1  # 중복 발행 없음
 
+
 async def test_publish_failure_keeps_session_without_sent(engine):
     """발행 실패(재시도 소진) 시 세션은 남기되 SENT는 기록 안 함(다음 tick 계속)."""
     _make_rule(engine)

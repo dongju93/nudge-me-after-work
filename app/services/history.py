@@ -74,11 +74,17 @@ class RuleHistory:
 class SessionRow:
     """세션 이력 테이블의 한 행(설계 historySessions 항목)."""
 
+    session_id: int  # 강제 완료/포기 POST의 대상 PK(진행 중 행에서만 폼으로 노출)
     date_label: str  # "07/06(월)"
     sent_at: str  # 첫 SENT 이벤트 시각 "20:00" | 없으면 "-"
     response: str  # CLICKED 라벨 체인 "나중에 → 하는중" | "무응답" | "무응답 대기 중"
     status: str  # SessionStatus 값(뱃지 색/라벨용)
     ended_at: str  # ended_at 시각 "20:12" | 진행 중이면 "-"
+
+    @property
+    def is_in_progress(self) -> bool:
+        """진행 중 행에서만 강제 종료 버튼을 노출하기 위한 판별(템플릿 문자열 비교 회피)."""
+        return self.status == SessionStatus.IN_PROGRESS.value
 
 
 def _window_dates(today: date, window_days: int) -> list[date]:
@@ -210,12 +216,14 @@ def session_rows(
 
     rows: list[SessionRow] = []
     for session in reversed(sessions):  # 조회는 오름차순 → 테이블은 최신 날짜가 위로
+        assert session.id is not None  # 조회된 영속 세션 → PK 존재(타입 내로잉)
         events = list(session.events)  # timestamp 오름차순(관계 order_by)
         first_sent = next(
             (event for event in events if event.event_type == EventType.SENT), None
         )
         rows.append(
             SessionRow(
+                session_id=session.id,
                 date_label=_date_label(session.date),
                 sent_at=_to_local_hhmm(
                     first_sent.timestamp if first_sent else None, tz
