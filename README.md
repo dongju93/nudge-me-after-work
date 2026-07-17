@@ -84,16 +84,27 @@ cp .env.example .env
 `env_file: .env`는 여기 적힌 값을 이미지 `ENV`보다 우선 주입하므로, 상대경로를 채워 넣으면
 볼륨(`/data`) 밖에 기록됩니다.
 
-### 2. 빌드 및 실행
+### 2. 실행
+
+compose는 Docker Hub 이미지를 pull해 구동만 합니다(빌드는 아래 push 단계가 담당). 배포
+서버에는 `compose.yaml`과 `.env`만 있으면 됩니다.
 
 ```bash
-docker compose build          # 멀티스테이지 빌드(uv builder → slim 런타임)
+docker compose pull           # Docker Hub에서 latest 이미지 받기
 docker compose up -d          # 백그라운드 상시 구동
 docker compose logs -f        # 로그 추적(json-file, 10MB×3 로테이션)
 docker compose ps             # 헬스체크 포함 상태 확인
 ```
 
-빌드만 따로: `docker build -t nudge-me-after-work:local .`
+Docker Hub에 올릴 때는 `latest`와 버전 태그(`pyproject.toml` 기준 `0.1.0`)를 함께 push합니다.
+compose는 `latest`만 참조하므로 버전 태그는 롤백·감사용입니다.
+
+```bash
+docker login          # Docker Hub 사용자명 + Access Token (최초 1회)
+docker buildx build --push \
+  -t tls2323/nudge-me-after-work:latest \
+  -t tls2323/nudge-me-after-work:0.1.0 .
+```
 
 ### 3. 데이터 지속성
 
@@ -113,15 +124,17 @@ docker run --rm -v nudge-data:/data -v "$PWD":/backup alpine \
 ### 4. 헬스체크 · TLS
 
 - 컨테이너 HEALTHCHECK는 인증·DB 없이 프로세스 응답만 확인하는 `GET /health`를 씁니다.
-- 포트는 `127.0.0.1:8000`에만 바인딩됩니다. 관리 화면·webhook을 외부에 공개하려면
+- 포트는 `8000` 에 바인딩됩니다. 관리 화면·webhook을 외부에 공개하려면
   앞단(Cloudflare Tunnel, Caddy 등)에서 TLS를 종단하세요. HTTP Basic 자격증명은 base64
   인코딩일 뿐 암호화가 아니므로 평문 HTTP로 공개하면 안 됩니다.
 
 ### 5. 업데이트
 
+새 이미지를 push한 뒤, 배포 서버에서 최신 `latest`를 받아 교체합니다(볼륨 데이터는 유지).
+
 ```bash
-git pull
-docker compose up -d --build  # 재빌드 후 무중단에 가깝게 교체(볼륨 데이터는 유지)
+docker compose pull           # 새 latest 이미지 받기
+docker compose up -d          # 바뀐 이미지로 재생성
 ```
 
 ### 관측 (선택)
