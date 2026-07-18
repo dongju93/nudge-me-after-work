@@ -52,6 +52,7 @@
 - SQLModel + SQLite: 규칙, 버튼 액션, 세션, 이벤트 이력 저장 (로컬·배포 모두 단일 SQLite 파일, 로컬 파일에는 WAL 모드 적용)
 - httpx: ntfy 알림 발행용 비동기 HTTP 클라이언트
 - ntfy: 모바일 푸시 알림과 액션 버튼 제공
+- nginx: 앱 앞단의 리버스 프록시(단일 인그레스). DuckDNS 도메인 인증서로 TLS를 직접 종단하고, 원 Host·스킴·클라이언트 IP 헤더를 앱으로 전달
 
 ## 데이터 모델
 
@@ -66,6 +67,56 @@
 tick을 돌려야 하므로 상시 실행이 전제이며, `restart: unless-stopped`로 재부팅·크래시
 후 자동 복귀합니다. 진행 중 세션과 스누즈 상태는 스케줄러 잡이 아니라 DB 행에 있으므로
 컨테이너를 재기동해도 볼륨의 SQLite 파일에서 그대로 복원됩니다.
+
+### 서비스 구성 · 포트 · 통신 흐름
+
+두 컨테이너가 compose 기본 네트워크에서 서비스 이름으로 통신합니다. `nginx`만 호스트에
+포트를 노출하고, `nudge`는 네트워크 내부에만 노출(`expose`)되어 nginx를 거쳐야만 도달합니다.
+TLS는 이 nginx가 최종 엣지로서 직접 종단합니다(앞단 프록시 없음).
+
+| 서비스  | 컨테이너 이름         | 컨테이너 포트 | 호스트 노출       | 역할                                      |
+| ------- | --------------------- | ------------- | ----------------- | ----------------------------------------- |
+| `nginx` | `nudge-nginx`         | `443` / `80`  | `18443` / `18080` | 유일한 인그레스. TLS 종단 + 리버스 프록시 |
+| `nudge` | `nudge-me-after-work` | `8000`        | 없음(`expose`)    | FastAPI 앱(UI·webhook·스케줄러)           |
+
+호스트 저포트(`443`/`80`)가 점유 중이라 nginx는 상위 포트 `18443`(https)·`18080`(http)으로
+매핑합니다. 공유기 포트포워딩을 공인 `443` → 호스트 `18443`, 공인 `80` → 호스트 `18080`으로
+걸어 인터넷 트래픽을 들이고, nginx가 DuckDNS 도메인 인증서로 TLS를 직접 종단합니다.
+
+```
+브라우저 / ntfy
+     │  HTTPS (DuckDNS 도메인)
+     ▼
+인터넷 → DuckDNS
+     │
+     ▼
+공유기 포트포워딩   공인 443 → 호스트 18443 (https)
+                    공인 80  → 호스트 18080 (http→https 승격)
+     │
+     ▼
+nginx :443 / :80   (nudge-nginx)  ── TLS 종단, X-Forwarded-Proto=https 설정
+     │  compose 네트워크, HTTP
+     ▼
+nudge :8000        (nudge-me-after-work)
+     │
+     └─► ntfy 발행은 앱에서 외부로 아웃바운드(httpx)
+```
+
+- 인바운드는 모두 `인터넷 → DuckDNS → 공유기 포트포워딩 → nginx → nudge(8000)` 한 경로로만
+  들어옵니다.
+- HTTP(`18080→80`)는 `GET /healthz` 직응답을 빼고 전부 https로 `301` 승격합니다. 관리 화면·
+  webhook의 HTTP Basic 자격증명이 평문으로 흐르지 않습니다. LAN에서 `http://호스트IP:18080`으로
+  직접 붙어도 리다이렉트가 포트를 `18443`으로 바꿔 https로 올려보냅니다.
+- nginx는 원 `Host`·`X-Forwarded-Host`를 보존해 앱의 Origin 검사(CSRF)·`WEBHOOK_BASE_URL`
+  검증이 그대로 동작하고, `X-Forwarded-Proto=https`로 스킴을 확정합니다.
+- uvicorn은 기본적으로 `127.0.0.1` 프록시의 `X-Forwarded-*`만 신뢰하는데, nginx는 compose
+  네트워크의 다른 컨테이너(`172.x`)라 그대로면 스킴이 http로 잘려 `url_for`가 http 절대 URL을
+  만듭니다(정적 자산이 TLS 포트에 http로 요청돼 400). 그래서 `nudge` 서비스에 환경변수
+  `FORWARDED_ALLOW_IPS=*`를 줘 nginx의 헤더를 신뢰합니다. `8000`은 호스트에 노출되지 않아
+  nginx만 도달 가능하므로 `*`가 안전합니다.
+- nginx 자체 라이브니스는 앱과 분리된 `GET /healthz`(200), 앱 준비 상태는 프록시되는
+  `GET /health`로 확인합니다.
+- ntfy 발행은 앱이 외부로 직접 보내는 아웃바운드라 이 경로와 무관합니다.
 
 ### 1. 환경 변수 준비
 
@@ -123,10 +174,12 @@ docker run --rm -v nudge-data:/data -v "$PWD":/backup alpine \
 
 ### 4. 헬스체크 · TLS
 
-- 컨테이너 HEALTHCHECK는 인증·DB 없이 프로세스 응답만 확인하는 `GET /health`를 씁니다.
-- 포트는 `8000` 에 바인딩됩니다. 관리 화면·webhook을 외부에 공개하려면
-  앞단(Cloudflare Tunnel, Caddy 등)에서 TLS를 종단하세요. HTTP Basic 자격증명은 base64
-  인코딩일 뿐 암호화가 아니므로 평문 HTTP로 공개하면 안 됩니다.
+- 앱 컨테이너 HEALTHCHECK는 인증·DB 없이 프로세스 응답만 확인하는 `GET /health`, nginx
+  컨테이너는 앱과 분리된 `GET /healthz`를 씁니다.
+- 외부 공개 지점은 nginx 호스트 포트 `18443`(https)이며, `18080`(http)은 https로 승격만
+  합니다(앱 `8000`은 호스트에 노출하지 않음). nginx가 DuckDNS 도메인 인증서로 TLS를 직접
+  종단하므로 앞단 프록시가 필요 없습니다. HTTP Basic 자격증명은 base64 인코딩일 뿐 암호화가
+  아니므로, 반드시 https(`18443`)로만 공개하고 평문 HTTP로 노출하지 마세요.
 
 ### 5. 업데이트
 
