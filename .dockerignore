@@ -1,11 +1,26 @@
-.git
-.venv
+# 버전 관리·로컬 도구
+.git/
+.gitignore
+.fastapicloud/
+.python-version
+.venv/
+
+# 민감 설정·영속 데이터
 .env
-.env.*
+.env.example
 data/
-__pycache__/
-*.py[cod]
+nginx/
+
+# 개발·문서 파일
 .pytest_cache/
 .ruff_cache/
-docs/
+**/__pycache__/
 tests/
+docs/
+README.md
+AGENTS.md
+CLAUDE.md
+compose.yaml
+
+# 로컬 산출물
+**/.DS_Store
