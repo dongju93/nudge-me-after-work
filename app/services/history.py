@@ -43,6 +43,13 @@ STATUS_LABELS: dict[str, str] = {
     NONE_CELL: "예정 없음",
 }
 
+# AUTO_CLOSED는 컷오프 종료와 관리자 강제 종료가 함께 쓰는 기존 이벤트 타입이다.
+# 최종 상태가 완료/포기면 관리자 개입으로만 만들어질 수 있으므로 응답 라벨로 구분한다.
+_ADMIN_CLOSE_LABELS = {
+    SessionStatus.COMPLETED: "관리자 완료",
+    SessionStatus.ABANDONED: "관리자 포기",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class DayCell:
@@ -74,11 +81,17 @@ class RuleHistory:
 class SessionRow:
     """세션 이력 테이블의 한 행(설계 historySessions 항목)."""
 
+    session_id: int  # 강제 완료/포기 POST의 대상 PK(진행 중 행에서만 폼으로 노출)
     date_label: str  # "07/06(월)"
     sent_at: str  # 첫 SENT 이벤트 시각 "20:00" | 없으면 "-"
-    response: str  # CLICKED 라벨 체인 "나중에 → 하는중" | "무응답" | "무응답 대기 중"
+    response: str  # 응답 체인 "나중에 → 하는중" | "관리자 완료" | "무응답"
     status: str  # SessionStatus 값(뱃지 색/라벨용)
     ended_at: str  # ended_at 시각 "20:12" | 진행 중이면 "-"
+
+    @property
+    def is_in_progress(self) -> bool:
+        """진행 중 행에서만 강제 종료 버튼을 노출하기 위한 판별(템플릿 문자열 비교 회피)."""
+        return self.status == SessionStatus.IN_PROGRESS.value
 
 
 def _window_dates(today: date, window_days: int) -> list[date]:
@@ -90,7 +103,7 @@ def _window_dates(today: date, window_days: int) -> list[date]:
 def _sessions_in_window(
     db: DBSession, rule_id: int, *, window_start: date, today: date
 ) -> list[NudgeSession]:
-    """규칙의 [window_start, today] 세션을 조회한다(날짜 오름차순)."""
+    """규칙의 [window_start, today] 세션을 조회한다(날짜·시작 시각 오름차순)."""
     return list(
         db.exec(
             select(NudgeSession)
@@ -99,7 +112,11 @@ def _sessions_in_window(
                 col(NudgeSession.date) >= window_start,
                 col(NudgeSession.date) <= today,
             )
-            .order_by(col(NudgeSession.date))
+            .order_by(
+                col(NudgeSession.date),
+                col(NudgeSession.scheduled_start_time),
+                col(NudgeSession.id),
+            )
         ).all()
     )
 
@@ -123,17 +140,20 @@ def summarize_rule(
     assert rule.id is not None
     dates = _window_dates(today, window_days)
     sessions = _sessions_in_window(db, rule.id, window_start=dates[0], today=today)
-    # uq_sessions_rule_date로 (rule, date)당 세션 1개가 보장되므로 날짜 키 매핑이 안전하다.
+    # 하루에 여러 세션이 있으면 캘린더 셀에는 가장 늦은 시작 시각의 상태를 표시한다.
+    # 통계는 아래에서 모든 세션을 집계한다.
     by_date = {session.date: session for session in sessions}
 
     days: list[DayCell] = []
-    completed = abandoned = no_response = in_progress = 0
     for day in dates:
         session = by_date.get(day)
         if session is None:
             days.append(DayCell(date=day, status=NONE_CELL))
             continue
         days.append(DayCell(date=day, status=session.status.value))
+
+    completed = abandoned = no_response = in_progress = 0
+    for session in sessions:
         match session.status:
             case SessionStatus.COMPLETED:
                 completed += 1
@@ -175,18 +195,23 @@ def _date_label(day: date) -> str:
 
 
 def _response_label(events: list[SessionEvent], status: SessionStatus) -> str:
-    """CLICKED 이벤트를 시간순으로 이어붙여 "나중에 → 하는중" 형태로 만든다.
+    """클릭과 관리자 종료를 시간순으로 이어붙여 "나중에 → 관리자 완료"로 만든다.
 
-    클릭이 하나도 없으면 진행 중이면 "무응답 대기 중", 종료됐으면 "무응답"으로 표시한다
-    (스펙 F-07 §2). 완료/포기는 항상 클릭에서 오므로 이 경로는 무응답/진행 중에만 탄다.
+    AUTO_CLOSED는 컷오프와 관리자 강제 종료가 공유하지만, completed/abandoned 상태의
+    AUTO_CLOSED는 관리자 종료에서만 생긴다. 응답 이벤트가 하나도 없으면 진행 중은
+    "무응답 대기 중", 종료 세션은 "무응답"으로 표시한다(스펙 F-07 §2).
     """
-    clicks = [
-        event.action_label
-        for event in events
-        if event.event_type == EventType.CLICKED and event.action_label
-    ]
-    if clicks:
-        return " → ".join(clicks)
+    responses: list[str] = []
+    for event in events:
+        if event.event_type == EventType.CLICKED and event.action_label:
+            responses.append(event.action_label)
+        elif (
+            event.event_type == EventType.AUTO_CLOSED
+            and (admin_label := _ADMIN_CLOSE_LABELS.get(status)) is not None
+        ):
+            responses.append(admin_label)
+    if responses:
+        return " → ".join(responses)
     return "무응답 대기 중" if status == SessionStatus.IN_PROGRESS else "무응답"
 
 
@@ -200,9 +225,9 @@ def session_rows(
 ) -> list[SessionRow]:
     """규칙의 최근 window_days일 세션을 최신순으로 테이블 행 뷰 모델로 만든다.
 
-    발행 시각 = 첫 SENT 이벤트, 종료 시각 = `ended_at`, 응답 = CLICKED 체인이다
-    (스펙 F-07 §2). 이벤트는 관계(`session.events`)가 timestamp 오름차순으로 정렬돼
-    있어 그대로 순서를 신뢰한다(models.py의 relationship order_by).
+    발행 시각 = 첫 SENT 이벤트, 종료 시각 = `ended_at`, 응답 = CLICKED 및 관리자 종료
+    체인이다(스펙 F-07 §2). 이벤트는 관계(`session.events`)가 timestamp 오름차순으로
+    정렬돼 있어 그대로 순서를 신뢰한다(models.py의 relationship order_by).
     """
     assert rule.id is not None
     window_start = today - timedelta(days=window_days - 1)
@@ -210,12 +235,14 @@ def session_rows(
 
     rows: list[SessionRow] = []
     for session in reversed(sessions):  # 조회는 오름차순 → 테이블은 최신 날짜가 위로
+        assert session.id is not None  # 조회된 영속 세션 → PK 존재(타입 내로잉)
         events = list(session.events)  # timestamp 오름차순(관계 order_by)
         first_sent = next(
             (event for event in events if event.event_type == EventType.SENT), None
         )
         rows.append(
             SessionRow(
+                session_id=session.id,
                 date_label=_date_label(session.date),
                 sent_at=_to_local_hhmm(
                     first_sent.timestamp if first_sent else None, tz

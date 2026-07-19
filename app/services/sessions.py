@@ -58,6 +58,20 @@ def auto_close_no_response(session: NudgeSession) -> None:
     _close(session, SessionStatus.NO_RESPONSE)
 
 
+def force_close(session: NudgeSession, status: SessionStatus) -> None:
+    """관리자가 진행 중 세션을 이력 화면에서 수동으로 완료/포기 종료한다 (F-07 수동 개입).
+
+    버튼 클릭 종료(F-05)·컷오프 자동 종료(F-06)와 **동일한 종료 경로**(`_close`)를
+    재사용한다 — 이래야 수동 개입도 예약 재알림 해제(`next_notify_at`/`next_message`
+    = None)와 `ended_at` 기록 규칙을 그대로 따른다(이 모듈에 종료 규칙을 모으는 이유).
+    허용 상태는 완료/포기뿐이다: 무응답은 컷오프 자동 종료 전용이고, 진행중은 종료가
+    아니므로 그 외 값은 호출부 버그로 간주해 assert로 조기 차단한다. 커밋·이벤트 기록은
+    호출자(라우터)가 트랜잭션 경계를 통제하도록 여기서 하지 않는다.
+    """
+    assert status in (SessionStatus.COMPLETED, SessionStatus.ABANDONED)
+    _close(session, status)
+
+
 def apply_action(db: DBSession, session: NudgeSession, action: RuleAction) -> None:
     """진행 중 세션에 버튼 액션 1건을 적용한다(UC-05~08).
 

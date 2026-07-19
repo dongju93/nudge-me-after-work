@@ -6,7 +6,10 @@ pydantic-settings는 `fastapi[standard]`의 전이 의존성이므로 별도 설
 
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
 
 
 class Settings(BaseSettings):
@@ -25,11 +28,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Turso 원격 DB. 둘 다 설정되면 로컬 database_url보다 우선한다.
-    turso_conn: str | None = None
-    turso_token: str | None = None
-
-    # 기본값이 있는 항목: 로컬 SQLite 파일. Turso 설정이 없을 때 이 URL로 엔진을 만든다.
+    # 로컬 SQLite 파일. 운영 컨테이너에서는 sqlite:////data/nudge.db로 덮어쓴다.
     database_url: str = "sqlite:///./data/nudge.db"
 
     # ntfy 발행 대상 (F-04). base_url은 ntfy 서버 루트, topic은 구독 주제.
@@ -44,10 +43,9 @@ class Settings(BaseSettings):
     # 관리 화면 HTTP Basic 인증 비밀번호 (F-08).
     admin_password: str
 
-    # Logfire 관측 토큰. FastAPI Cloud가 Logfire 통합 연결 시 `LOGFIRE_TOKEN`으로 주입한다.
-    # 로컬/CI에는 없는 게 정상이라 Optional로 둔다 — 토큰이 없으면 configure가 전송을
-    # 하지 않도록(send_to_logfire="if-token-present") main.py에서 처리하므로, 부재해도
-    # 기동은 실패하지 않는다.
+    # Logfire 관측 토큰. 로컬/CI/라즈베리파이에서 선택적으로 주입한다. 토큰이 없으면
+    # configure가 전송하지 않도록(send_to_logfire="if-token-present") main.py에서
+    # 처리하므로, 부재해도 기동은 실패하지 않는다.
     logfire_token: str | None = None
 
     # 시각 판단 기준 시간대. 모든 요일/시각 비교는 이 값으로 계산한다.
@@ -55,6 +53,19 @@ class Settings(BaseSettings):
 
     # 최초 알림 트리거 유예 창(분). start_time 이후 이 시간 안에만 최초 발송한다 (F-06).
     trigger_grace_minutes: int = 10
+
+    @field_validator("database_url")
+    @classmethod
+    def validate_database_url(cls, value: str) -> str:
+        """Python 기본 SQLite 드라이버 외의 DB URL은 기동 전에 거절한다."""
+        try:
+            drivername = make_url(value).drivername
+        except ArgumentError as exc:
+            raise ValueError("DATABASE_URL must be a valid SQLite URL.") from exc
+
+        if drivername != "sqlite":
+            raise ValueError("DATABASE_URL must use the sqlite scheme.")
+        return value
 
 
 @lru_cache

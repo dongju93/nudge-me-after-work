@@ -1,0 +1,67 @@
+services:
+  nudge:
+    # compose는 Docker Hub에서 이미지를 pull해 구동만 한다(빌드는 buildx --push가 담당).
+    # latest 고정: 항상 최신 이미지를 참조하고, 버전 태그는 릴리스·롤백용으로만 push한다.
+    image: docker.io/tls2323/nudge-me-after-work:latest
+    pull_policy: always
+    container_name: nudge-me-after-work
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # uvicorn은 X-Forwarded-* 를 127.0.0.1 프록시에서만 신뢰한다. nginx는 compose
+      # 네트워크의 다른 컨테이너(172.x)라 기본값으론 스킴을 못 넘겨받아, url_for가 https
+      # 대신 http 절대 URL을 만들어 정적 자산이 TLS 포트에 http로 요청돼 400이 난다.
+      # 8000은 호스트에 노출(expose만, publish 아님)되지 않아 nginx만 도달 가능하므로 *가 안전.
+      FORWARDED_ALLOW_IPS: "*"
+    # 호스트에 직접 노출하지 않는다. 이제 nginx만이 유일한 인그레스이며, 앱은
+    # compose 네트워크 안에서 서비스 이름(nudge:8000)으로만 도달 가능하다.
+    expose:
+      - "8000"
+    volumes:
+      # 이름 있는 볼륨: 이미지의 /data(app:app) 소유권을 물려받아 비루트(uid 10001)로도
+      # 바로 쓸 수 있다. bind 마운트였다면 호스트 디렉터리를 직접 chown해야 한다.
+      - nudge-data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  nginx:
+    # 최종 엣지 리버스 프록시. TLS를 여기서 종단한다(DuckDNS 도메인 인증서를 직접 주입).
+    # 리포의 다른 이미지처럼 태그를 고정한다(재현성). alpine으로 이미지 크기를 줄인다.
+    image: docker.io/library/nginx:1.31.3-alpine
+    container_name: nudge-nginx
+    restart: unless-stopped
+    depends_on:
+      nudge:
+        # 앱이 헬스체크를 통과한 뒤에 프록시를 띄운다(Dockerfile HEALTHCHECK 활용).
+        condition: service_healthy
+    # 호스트 저포트가 점유 중이라 상위 임의 포트로 매핑한다. 컨테이너 내부는 80/443 그대로.
+    # 공유기 포트포워딩을 공인 443 → 호스트 18443(https)로, 공인 80 → 호스트 18080(http→https
+    # 승격)으로 걸어 인터넷 트래픽을 여기로 들인다.
+    ports:
+      - "0.0.0.0:18443:443"
+      - "0.0.0.0:18080:80"
+    volumes:
+      # 설정만 읽기 전용으로 주입. 이미지를 새로 굽지 않고 conf만 갱신·리로드할 수 있다.
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      # 직접 준비한 TLS 인증서(fullchain.pem/privkey.pem)를 ro로 주입. 갱신 후 nginx만
+      # 리로드하면 되고 이미지를 다시 굽지 않는다. certs 디렉터리는 커밋하지 않는다.
+      - ./nginx/certs:/etc/nginx/certs:ro
+    healthcheck:
+      # 앱과 분리된 nginx 자체 라이브니스 경로.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  nudge-data:

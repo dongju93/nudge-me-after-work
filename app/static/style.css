@@ -29,8 +29,9 @@
   --neutral: oklch(0.45 0.01 250);
   --none-bg: oklch(0.26 0.015 250);
 
-  --font: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
-    "Malgun Gothic", "Segoe UI", sans-serif;
+  --font:
+    -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic",
+    "Segoe UI", sans-serif;
 }
 
 * {
@@ -934,12 +935,36 @@ a {
   padding: 18px 24px 0;
 }
 
-/* 헤더/행 공용 5열 그리드(설계 grid-template-columns) */
+/* 헤더/행 공용 6열 그리드 — 마지막 열은 진행 중 세션의 강제 완료/포기 버튼(관리) */
 .session-table__head,
 .session-table__row {
   display: grid;
-  grid-template-columns: 1fr 1fr 1.6fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1.6fr 1fr 1fr 1.1fr;
   align-items: center;
+}
+
+/* 관리 열: 완료/포기 미니 버튼을 가로로 나란히(진행 중 아닌 행은 빈 칸) */
+.session-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.mini-btn {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.mini-btn--complete {
+  background: oklch(0.65 0.15 150 / 0.16);
+  color: var(--success);
+}
+
+.mini-btn--abandon {
+  background: oklch(0.62 0.17 25 / 0.16);
+  color: var(--danger);
 }
 
 .session-table__head {

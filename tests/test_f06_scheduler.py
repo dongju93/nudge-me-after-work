@@ -27,7 +27,7 @@ from app.models import (
     SessionStatus,
 )
 from app.notifier import Notifier, NtfyPublishError
-from app.scheduler import _WEEKDAY_TOKENS, _is_duplicate_session_error, tick
+from app.scheduler import _WEEKDAY_TOKENS, tick
 
 KST = ZoneInfo("Asia/Seoul")
 GRACE_MINUTES = 10
@@ -127,6 +127,7 @@ def _make_session(
     rule_id: int,
     *,
     on: date,
+    scheduled_start_time: time = time(20, 0),
     status: SessionStatus = SessionStatus.IN_PROGRESS,
     next_notify_at: datetime | None = None,
     next_message: str | None = None,
@@ -135,6 +136,7 @@ def _make_session(
         session = NudgeSession(
             rule_id=rule_id,
             date=on,
+            scheduled_start_time=scheduled_start_time,
             status=status,
             next_notify_at=next_notify_at,
             next_message=next_message,
@@ -272,15 +274,42 @@ async def test_first_notification_not_duplicated(engine):
     assert len(notifier.calls) == 1  # 중복 발행 없음
 
 
-def test_duplicate_session_error_recognizes_libsql_hrana_value_error():
-    """libSQL/Hrana 드라이버의 UNIQUE 위반 ValueError도 오늘 세션 중복으로 본다."""
-    error = ValueError(
-        "Hrana: `stream error: `Error { message: "
-        '"SQLite error: UNIQUE constraint failed: sessions.rule_id, sessions.date", '
-        'code: "SQLITE_CONSTRAINT" }``'
+async def test_start_time_change_runs_again_on_same_day(engine):
+    """20:00 실행 종료 후 시작 시각을 20:05로 바꾸면 20:05 실행이 시작된다."""
+    rule_id = _make_rule(engine, start_time=time(20, 0))
+    notifier = FakeNotifier()
+    settings = _settings()
+
+    await tick(
+        notifier=notifier,
+        settings=settings,
+        engine=engine,
+        now=datetime(2026, 7, 9, 20, 0, tzinfo=KST),
     )
 
-    assert _is_duplicate_session_error(error)
+    with DBSession(engine) as db:
+        first = db.exec(select(NudgeSession)).one()
+        first.status = SessionStatus.COMPLETED
+        db.add(first)
+        rule = db.get(Rule, rule_id)
+        assert rule is not None
+        rule.start_time = time(20, 5)
+        db.add(rule)
+        db.commit()
+
+    await tick(
+        notifier=notifier,
+        settings=settings,
+        engine=engine,
+        now=datetime(2026, 7, 9, 20, 5, tzinfo=KST),
+    )
+
+    sessions = _sessions(engine)
+    assert [session.scheduled_start_time for session in sessions] == [
+        time(20, 0),
+        time(20, 5),
+    ]
+    assert len(notifier.calls) == 2
 
 
 async def test_publish_failure_keeps_session_without_sent(engine):
@@ -437,7 +466,7 @@ async def test_full_timeline_first_snooze_resend_cutoff(engine):
     시작 20:00 / 컷오프 20:05 / 스누즈 1분 규칙으로:
       T0=20:00 → (a) 세션 생성 + 최초 발행(SENT)
       스누즈   → webhook이 남기는 예약(next_notify_at=20:01)을 직접 심는다(전이는 F-05가 커버)
-      T1=20:01 → (b) 재발행(SENT) + 예약 해제, (a)는 UniqueConstraint로 중복 생성 안 함
+      T1=20:01 → (b) 재발행(SENT) + 예약 해제, (a)는 같은 시작 시각이라 중복 생성 안 함
       T2=20:05 → (c) 컷오프 무응답 종료(AUTO_CLOSED), 발행 없음
     최종적으로 발행 2회(최초+재발송), 이벤트 SENT·SENT·AUTO_CLOSED, 상태 no_response.
     """

@@ -97,13 +97,18 @@ def _add_session(
     *,
     on: date,
     status: SessionStatus,
+    scheduled_start_time: time = time(20, 0),
     ended_at: datetime | None = None,
     events: list[tuple[EventType, str | None, datetime]] | None = None,
 ) -> int:
     """세션 1개(+선택 이벤트)를 만들어 session_id를 돌려준다."""
     with DBSession(engine) as db:
         session = NudgeSession(
-            rule_id=rule_id, date=on, status=status, ended_at=ended_at
+            rule_id=rule_id,
+            date=on,
+            scheduled_start_time=scheduled_start_time,
+            status=status,
+            ended_at=ended_at,
         )
         db.add(session)
         db.flush()
@@ -197,6 +202,33 @@ def test_empty_days_render_as_none_cells(engine):
     assert summary.days[-1].status == SessionStatus.COMPLETED.value
 
 
+def test_multiple_sessions_on_same_day_are_all_counted(engine):
+    """같은 날 시작 시각이 다른 세션은 모두 집계하고 셀에는 마지막 상태를 표시한다."""
+    rule_id = _make_rule(engine)
+    _add_session(
+        engine,
+        rule_id,
+        on=TODAY,
+        scheduled_start_time=time(20, 0),
+        status=SessionStatus.COMPLETED,
+    )
+    _add_session(
+        engine,
+        rule_id,
+        on=TODAY,
+        scheduled_start_time=time(20, 5),
+        status=SessionStatus.ABANDONED,
+    )
+
+    with DBSession(engine) as db:
+        summary = summarize_rule(db, _get_rule(db, rule_id), today=TODAY)
+
+    assert summary.completed == 1
+    assert summary.abandoned == 1
+    assert summary.rate == 50
+    assert summary.days[-1].status == SessionStatus.ABANDONED.value
+
+
 # --- 세션 이력 테이블 단위 테스트 ------------------------------------------
 
 
@@ -258,6 +290,58 @@ def test_session_row_no_clicks_labels(engine):
     assert rows[0].ended_at == "-"
     assert rows[1].response == "무응답"
     assert rows[1].ended_at == "23:00"
+
+
+@pytest.mark.parametrize(
+    ("status", "expected_response"),
+    [
+        (SessionStatus.COMPLETED, "관리자 완료"),
+        (SessionStatus.ABANDONED, "관리자 포기"),
+    ],
+)
+def test_session_row_admin_close_labels(engine, status, expected_response):
+    """관리자 강제 종료는 완료/포기 상태에 맞는 응답으로 표시한다."""
+    rule_id = _make_rule(engine)
+    base = datetime(2026, 7, 9, 11, 0, tzinfo=UTC)
+    _add_session(
+        engine,
+        rule_id,
+        on=TODAY,
+        status=status,
+        ended_at=base + timedelta(minutes=12),
+        events=[
+            (EventType.SENT, None, base),
+            (EventType.AUTO_CLOSED, None, base + timedelta(minutes=12)),
+        ],
+    )
+
+    with DBSession(engine) as db:
+        rows = session_rows(db, _get_rule(db, rule_id), today=TODAY, tz=KST)
+
+    assert rows[0].response == expected_response
+
+
+def test_session_row_snooze_then_admin_close_keeps_response_chain(engine):
+    """스누즈 뒤 관리자 종료도 앞선 사용자 응답과 종료 주체를 모두 표시한다."""
+    rule_id = _make_rule(engine)
+    base = datetime(2026, 7, 9, 11, 0, tzinfo=UTC)
+    _add_session(
+        engine,
+        rule_id,
+        on=TODAY,
+        status=SessionStatus.COMPLETED,
+        ended_at=base + timedelta(minutes=12),
+        events=[
+            (EventType.SENT, None, base),
+            (EventType.CLICKED, "나중에", base + timedelta(minutes=5)),
+            (EventType.AUTO_CLOSED, None, base + timedelta(minutes=12)),
+        ],
+    )
+
+    with DBSession(engine) as db:
+        rows = session_rows(db, _get_rule(db, rule_id), today=TODAY, tz=KST)
+
+    assert rows[0].response == "나중에 → 관리자 완료"
 
 
 def test_session_row_missing_sent_shows_dash(engine):
@@ -340,3 +424,150 @@ async def test_history_respects_rule_id_query(engine, overrides):
         resp = await ac.get(f"/history?rule_id={inactive_id}")
     assert resp.status_code == 200
     assert "세션 이력" in resp.text
+
+
+# --- 진행 중 세션 강제 종료 (POST /history/sessions/{id}/close) --------------
+#
+# CSRF 게이트(verify_origin)가 history 라우터에도 걸리므로 상태 변경 POST에는 항상
+# 같은 오리진(Origin: http://test = Host)을 실어 게이트를 통과시킨다. 상태 전이는
+# force_close(_close 공유)에 위임되므로 여기서는 라우터 계약(검증/이벤트/멱등/CSRF)에
+# 초점을 둔다.
+_SAME_ORIGIN = {"Origin": "http://test"}
+
+
+def _get_session(engine, session_id: int) -> NudgeSession:
+    with DBSession(engine) as db:
+        session = db.get(NudgeSession, session_id)
+        assert session is not None
+        db.refresh(session)
+        return session
+
+
+@pytest.mark.parametrize(
+    ("resolution", "expected", "expected_response"),
+    [
+        ("completed", SessionStatus.COMPLETED, "관리자 완료"),
+        ("abandoned", SessionStatus.ABANDONED, "관리자 포기"),
+    ],
+)
+async def test_force_close_transitions_and_records_event(
+    engine, overrides, resolution, expected, expected_response
+):
+    """진행 중 세션을 완료/포기로 강제 종료하면 303 + 상태 전이 + AUTO_CLOSED 기록."""
+    rule_id = _make_rule(engine)
+    session_id = _add_session(
+        engine, rule_id, on=TODAY, status=SessionStatus.IN_PROGRESS
+    )
+    # 예약된 스누즈 재알림이 종료로 해제되는지 확인하려고 미리 심어둔다.
+    with DBSession(engine) as db:
+        session = db.get(NudgeSession, session_id)
+        assert session is not None
+        session.next_notify_at = datetime(2026, 7, 9, 12, 0, tzinfo=UTC)
+        session.next_message = "재알림 문구"
+        db.add(session)
+        db.commit()
+
+    async with _client() as ac:
+        resp = await ac.post(
+            f"/history/sessions/{session_id}/close",
+            data={"resolution": resolution},
+            headers=_SAME_ORIGIN,
+        )
+    assert resp.status_code == 303
+    assert f"rule_id={rule_id}" in resp.headers["location"]
+
+    closed = _get_session(engine, session_id)
+    assert closed.status == expected
+    assert closed.ended_at is not None
+    # 완료/포기 시 재발송 중단(_close 규약) — 예약이 확실히 비워져야 한다.
+    assert closed.next_notify_at is None
+    assert closed.next_message is None
+    with DBSession(engine) as db:
+        session = db.get(NudgeSession, session_id)
+        assert session is not None
+        events = list(session.events)
+    assert any(e.event_type == EventType.AUTO_CLOSED for e in events)
+
+    async with _client() as ac:
+        history_resp = await ac.get(f"/history?rule_id={rule_id}")
+    assert history_resp.status_code == 200
+    assert expected_response in history_resp.text
+
+
+async def test_force_close_ignores_already_ended_session(engine, overrides):
+    """이미 종료된 세션의 강제 종료는 상태를 바꾸지 않고 303으로 되돌린다(멱등)."""
+    rule_id = _make_rule(engine)
+    ended_at = datetime(2026, 7, 9, 11, 0, tzinfo=UTC)
+    session_id = _add_session(
+        engine,
+        rule_id,
+        on=TODAY,
+        status=SessionStatus.COMPLETED,
+        ended_at=ended_at,
+    )
+
+    async with _client() as ac:
+        resp = await ac.post(
+            f"/history/sessions/{session_id}/close",
+            data={"resolution": "abandoned"},
+            headers=_SAME_ORIGIN,
+        )
+    assert resp.status_code == 303
+    # 완료 상태가 포기로 덮이지 않아야 한다(종료 세션 불변).
+    assert _get_session(engine, session_id).status == SessionStatus.COMPLETED
+
+
+async def test_force_close_rejects_invalid_resolution(engine, overrides):
+    """무응답/진행중 등 화이트리스트 밖 상태 값은 400으로 거절한다(폼 변조 방어)."""
+    rule_id = _make_rule(engine)
+    session_id = _add_session(
+        engine, rule_id, on=TODAY, status=SessionStatus.IN_PROGRESS
+    )
+
+    async with _client() as ac:
+        resp = await ac.post(
+            f"/history/sessions/{session_id}/close",
+            data={"resolution": "no_response"},
+            headers=_SAME_ORIGIN,
+        )
+    assert resp.status_code == 400
+    assert _get_session(engine, session_id).status == SessionStatus.IN_PROGRESS
+
+
+async def test_force_close_blocked_without_origin(engine, overrides):
+    """Origin 없는 강제 종료 POST는 CSRF 게이트에서 403(상태 불변)."""
+    rule_id = _make_rule(engine)
+    session_id = _add_session(
+        engine, rule_id, on=TODAY, status=SessionStatus.IN_PROGRESS
+    )
+
+    async with _client() as ac:
+        resp = await ac.post(
+            f"/history/sessions/{session_id}/close",
+            data={"resolution": "completed"},
+        )
+    assert resp.status_code == 403
+    assert _get_session(engine, session_id).status == SessionStatus.IN_PROGRESS
+
+
+async def test_history_renders_force_close_buttons_only_for_in_progress(
+    engine, overrides
+):
+    """진행 중 세션 행에만 강제 종료 폼이 렌더된다(종료 세션엔 없음)."""
+    rule_id = _make_rule(engine)
+    ongoing = _add_session(engine, rule_id, on=TODAY, status=SessionStatus.IN_PROGRESS)
+    _add_session(
+        engine,
+        rule_id,
+        on=TODAY - timedelta(days=1),
+        status=SessionStatus.COMPLETED,
+        ended_at=datetime(2026, 7, 8, 11, 0, tzinfo=UTC),
+    )
+
+    async with _client() as ac:
+        resp = await ac.get(f"/history?rule_id={rule_id}")
+    assert resp.status_code == 200
+    # 진행 중 세션의 close 폼 action이 렌더되어야 한다.
+    assert f"/history/sessions/{ongoing}/close" in resp.text
+    # 진행 중 세션 1개뿐이므로 close 폼은 정확히 2개(완료/포기)만 존재한다.
+    assert resp.text.count("/close") == 2

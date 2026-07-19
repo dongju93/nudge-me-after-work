@@ -129,22 +129,28 @@ class RuleAction(SQLModel, table=True):
 
 
 class NudgeSession(SQLModel, table=True):
-    """규칙의 하루치 실행 단위 (PRD §6 Session).
+    """규칙의 시작 시각별 실행 단위 (PRD §6 Session).
 
     도메인 'Session'은 SQLModel의 DB Session과 이름이 겹치므로 클래스명은
     NudgeSession, 테이블명은 sessions로 둔다(스펙 §2.2).
     """
 
     __tablename__ = "sessions"  # pyrefly: ignore[bad-override]  # SQLModel 표준 사용법(descriptor 오탐)
-    # 하루에 규칙당 세션 1개를 DB 수준에서 보장. 스케줄러 tick이 중복 실행돼도
-    # 최초 알림이 두 번 나가지 않도록 하는 UC-04의 마지막 안전장치.
+    # 같은 날짜라도 시작 시각이 바뀌면 별도 실행으로 허용한다. 반면 동일한 예정 시각은
+    # DB 수준에서 하나만 허용해 grace window 안의 다음 tick이 다시 발송하지 못하게 한다.
     __table_args__ = (
-        UniqueConstraint("rule_id", "date", name="uq_sessions_rule_date"),
+        UniqueConstraint(
+            "rule_id",
+            "date",
+            "scheduled_start_time",
+            name="uq_sessions_rule_date_start_time",
+        ),
     )
 
     id: int | None = Field(default=None, primary_key=True)
     rule_id: int = Field(foreign_key="rules.id", ondelete="CASCADE", index=True)
-    date: date  # 실행 날짜(로컬). rule_id와 함께 유니크.
+    date: date  # 실행 날짜(로컬)
+    scheduled_start_time: time  # 이 실행을 만든 규칙 시작 시각(로컬 wall-clock)
     status: SessionStatus = Field(sa_column=_str_enum_column(SessionStatus))
     # 스누즈 예약을 APScheduler 메모리 잡이 아니라 DB 행으로 저장한다 — 재시작 후에도
     # 재알림이 유실되지 않도록(PRD §4). tick(F-06)이 이 두 값을 읽어 재발송한다.

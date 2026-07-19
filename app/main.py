@@ -101,9 +101,9 @@ def _configure_observability(app: FastAPI) -> None:
     잠긴다. 따라서 lifespan 안에서 계측하면 "이미 시작된 앱" 오류가 난다 — app 객체가
     만들어진 직후 여기서 건다.
 
-    - configure: 토큰은 Settings 경유(FastAPI Cloud가 LOGFIRE_TOKEN 주입). 로컬/CI엔
-      토큰이 없으므로 send_to_logfire="if-token-present"로 두면 그때는 전송을 하지 않아
-      네트워크·소음 없이 무해하게 no-op이 된다.
+    - configure: 토큰은 Settings 경유로 주입한다. 토큰이 없으면
+      send_to_logfire="if-token-present"가 전송하지 않아 네트워크·소음 없이 무해하게
+      no-op이 된다.
     - instrument_fastapi: 요청 span(경로/상태/지연) 자동 수집.
     - LogfireLoggingHandler: 기존 표준 logging 경로를 Logfire로 흘려보낸다. `app` 로거를
       INFO로 설정해 규칙 변경, 매분 tick 판정, ntfy 발행, webhook 액션 처리까지 추적한다.
@@ -142,14 +142,24 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 
 # 라우터 등록. rules는 최상위(`/`, `/rules/*`), history는 `/history`를 담당한다.
 # 관리 화면인 이 둘에는 F-08 HTTP Basic 인증을 라우터 단위로 일괄 적용한다.
-# rules에는 추가로 `verify_origin`(CSRF, 보안 리뷰 #2)을 건다 — Basic 자격증명은
-# 브라우저가 교차 사이트 요청에 자동 재전송하므로, 상태 변경 POST의 출처를 검증해야
-# 한다. history는 GET 전용(상태 변경 없음)이라 인증만으로 충분하다. 의존성은 나열
-# 순서대로 실행되므로 인증(require_admin) → 출처검증(verify_origin) 순으로 둔다.
+# 둘 다 상태 변경 POST를 가지므로(rules: 생성/수정/토글/삭제, history: 세션 강제 종료)
+# `verify_origin`(CSRF, 보안 리뷰 #2)도 함께 건다 — Basic 자격증명은 브라우저가 교차
+# 사이트 요청에 자동 재전송하므로, 상태 변경 POST의 출처를 검증해야 한다. verify_origin은
+# 안전 메서드(GET/HEAD/OPTIONS)를 건너뛰므로 history의 이력 조회 GET에는 영향이 없다.
+# 의존성은 나열 순서대로 실행되므로 인증(require_admin) → 출처검증(verify_origin) 순으로 둔다.
 # webhooks는 `/webhooks/*` — ntfy 서버가 호출하는 F-05 엔드포인트로, Basic 자격증명도
 # Origin 헤더도 실을 수 없어 두 통제의 **예외**다(대신 F-05의 token 쿼리 검증만 적용).
 app.include_router(
     rules.router, dependencies=[Depends(require_admin), Depends(verify_origin)]
 )
-app.include_router(history.router, dependencies=[Depends(require_admin)])
+app.include_router(
+    history.router, dependencies=[Depends(require_admin), Depends(verify_origin)]
+)
 app.include_router(webhooks.router)
+
+
+# 컨테이너 HEALTHCHECK용 경량 liveness 엔드포인트. 인증/DB 접근 없이 프로세스가
+# 요청을 받을 수 있는지만 확인한다(준비 상태 판정을 /docs 활성화 여부에 묶지 않기 위함).
+@app.get("/health", include_in_schema=False)
+def health() -> dict[str, str]:
+    return {"status": "ok"}

@@ -1,16 +1,17 @@
 """DB 엔진 · 초기화 · 세션 의존성 (F-02).
 
-Turso 환경 변수가 있으면 원격 libSQL DB를 쓰고, 없으면 로컬 SQLite 파일을 쓴다.
-엔진은 모듈 전역으로 1개만 만들되, Turso는 만료된 Hrana 스트림 재사용을 막기 위해
-커넥션 풀을 쓰지 않는다. 스키마 생성(`init_db`)은 lifespan 기동 시 1회 호출한다.
+로컬 SQLite 파일을 사용하는 엔진을 모듈 전역으로 1개만 만든다.
+스키마 생성·변경(`init_db`)은 lifespan 기동 시 1회 호출한다.
 """
 
 from collections.abc import Iterator
+from datetime import UTC, datetime
+import logging
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import event
+from sqlalchemy import Engine, event, inspect
 from sqlalchemy.engine import make_url
-from sqlalchemy.pool import NullPool
 from sqlmodel import Session as DBSession, SQLModel, create_engine
 
 # 모델 모듈을 반드시 import해야 SQLModel.metadata에 테이블 4종이 등록된다.
@@ -18,52 +19,29 @@ from sqlmodel import Session as DBSession, SQLModel, create_engine
 from app import models  # noqa: F401  -- 등록 목적의 side-effect import
 from app.config import get_settings
 
+logger = logging.getLogger(__name__)
+
 _settings = get_settings()
 
-
-def _build_engine_config() -> tuple[str, dict[str, object]]:
-    """설정에서 SQLAlchemy URL과 드라이버별 connect_args를 만든다."""
-    if _settings.turso_conn or _settings.turso_token:
-        if not _settings.turso_conn or not _settings.turso_token:
-            raise ValueError("TURSO_CONN and TURSO_TOKEN must be set together.")
-
-        turso_conn = _settings.turso_conn.strip()
-        if turso_conn.startswith("sqlite+libsql://"):
-            database_url = turso_conn
-        elif turso_conn.startswith("libsql://"):
-            database_url = f"sqlite+{turso_conn}"
-        else:
-            raise ValueError(
-                "TURSO_CONN must start with libsql:// or sqlite+libsql://."
-            )
-
-        if "secure=" not in database_url:
-            separator = "&" if "?" in database_url else "?"
-            database_url = f"{database_url}{separator}secure=true"
-
-        return database_url, {"auth_token": _settings.turso_token}
-
-    # check_same_thread=False: 스케줄러 스레드에서 만든 커넥션을 웹 요청 스레드가 써도
-    # SQLite가 막지 않도록 한다. 단일 프로세스이므로 경합은 WAL + 짧은 트랜잭션으로 흡수한다.
-    return _settings.database_url, {"check_same_thread": False}
+# check_same_thread=False: 스케줄러 스레드에서 만든 커넥션을 웹 요청 스레드가 써도
+# SQLite가 막지 않도록 한다. 단일 프로세스이므로 경합은 WAL + 짧은 트랜잭션으로 흡수한다.
+engine = create_engine(
+    _settings.database_url,
+    connect_args={"check_same_thread": False},
+)
 
 
-_database_url, _connect_args = _build_engine_config()
-_uses_turso = bool(_settings.turso_conn and _settings.turso_token)
-
-if _uses_turso:
-    engine = create_engine(
-        _database_url,
-        connect_args=_connect_args,
-        poolclass=NullPool,
-    )
-else:
-    engine = create_engine(_database_url, connect_args=_connect_args)
+def _scheduled_start_time_from_created_at(created_at: str) -> str:
+    """레거시 세션 생성 시각(naive UTC)을 로컬 wall-clock 시각으로 바꾼다."""
+    created = datetime.fromisoformat(created_at)
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=UTC)
+    return created.astimezone(ZoneInfo(_settings.timezone)).time().isoformat()
 
 
 @event.listens_for(engine, "connect")
 def _set_sqlite_pragma(dbapi_connection: object, _connection_record: object) -> None:
-    """새 SQLite/libSQL 커넥션마다 PRAGMA를 건다.
+    """새 SQLite 커넥션마다 PRAGMA를 건다.
 
     - foreign_keys=ON: SQLite 계열은 기본으로 FK를 강제하지 않는다. 켜야 models.py의
       ondelete=CASCADE가 DB 수준에서도 동작하고, 잘못된 rule_id 삽입이 차단된다.
@@ -72,25 +50,141 @@ def _set_sqlite_pragma(dbapi_connection: object, _connection_record: object) -> 
     """
     cursor = dbapi_connection.cursor()  # type: ignore[attr-defined]
     cursor.execute("PRAGMA foreign_keys=ON")
-    if not _uses_turso:
-        cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA journal_mode=WAL")
     cursor.close()
 
 
-def init_db() -> None:
-    """DB 파일 디렉터리를 보장하고 스키마를 생성한다 (F-01 lifespan에서 호출).
+def _migrate_sessions_to_start_time_identity(db_engine: Engine) -> None:
+    """기존 sessions의 날짜 단위 unique를 시작 시각 단위 unique로 교체한다.
 
-    `create_all`은 이미 존재하는 테이블은 건드리지 않으므로 재기동 시 안전하게
-    반복 호출할 수 있다(idempotent). Alembic은 첫 스키마 변경 시점에 도입한다.
+    SQLite는 테이블 unique constraint를 직접 삭제할 수 없어 테이블을 재구성한다. 기존
+    행의 시작 시각은 세션 생성 시각을 로컬 시각으로 변환해 채우며, PK를 유지해
+    session_events의 외래 키도 그대로 보존한다. 새 DB나 이미 변환된 DB에서는 아무
+    작업도 하지 않는다.
     """
-    if not _uses_turso:
-        # sqlite:///./data/nudge.db → database="./data/nudge.db". 상위 디렉터리가 없으면
-        # SQLite가 파일을 못 만들어 "unable to open database file"로 실패하므로 미리 만든다.
-        # (:memory: 등 파일이 아닌 DB는 database가 비어 있어 건너뛴다.)
-        db_path = make_url(_database_url).database
-        if db_path and db_path != ":memory:":
-            Path(db_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
+    schema = inspect(db_engine)
+    if not schema.has_table("sessions"):
+        return
+    column_names = {column["name"] for column in schema.get_columns("sessions")}
+    if "scheduled_start_time" in column_names:
+        return
 
+    with db_engine.connect() as connection:
+        # foreign_keys는 트랜잭션 밖에서만 전환된다. 테이블 교체 중 기존 이벤트 행이
+        # cascade 삭제되지 않게 잠시 끄고, 커밋 전에 foreign_key_check로 정합성을 확인한다.
+        connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        connection.commit()
+        try:
+            with connection.begin():
+                legacy_sessions = (
+                    connection.exec_driver_sql(
+                        """
+                    SELECT
+                        id,
+                        rule_id,
+                        date,
+                        status,
+                        next_notify_at,
+                        next_message,
+                        created_at,
+                        ended_at
+                    FROM sessions
+                    """
+                    )
+                    .mappings()
+                    .all()
+                )
+                migrated_sessions = [
+                    {
+                        **dict(session),
+                        "scheduled_start_time": (
+                            _scheduled_start_time_from_created_at(session["created_at"])
+                        ),
+                    }
+                    for session in legacy_sessions
+                ]
+                connection.exec_driver_sql(
+                    """
+                    CREATE TABLE sessions_new (
+                        id INTEGER NOT NULL,
+                        rule_id INTEGER NOT NULL,
+                        date DATE NOT NULL,
+                        scheduled_start_time TIME NOT NULL,
+                        status VARCHAR(11) NOT NULL,
+                        next_notify_at DATETIME,
+                        next_message VARCHAR,
+                        created_at DATETIME NOT NULL,
+                        ended_at DATETIME,
+                        PRIMARY KEY (id),
+                        CONSTRAINT uq_sessions_rule_date_start_time
+                            UNIQUE (rule_id, date, scheduled_start_time),
+                        FOREIGN KEY(rule_id) REFERENCES rules (id) ON DELETE CASCADE
+                    )
+                    """
+                )
+                if migrated_sessions:
+                    connection.exec_driver_sql(
+                        """
+                        INSERT INTO sessions_new (
+                            id,
+                            rule_id,
+                            date,
+                            scheduled_start_time,
+                            status,
+                            next_notify_at,
+                            next_message,
+                            created_at,
+                            ended_at
+                        )
+                        VALUES (
+                            :id,
+                            :rule_id,
+                            :date,
+                            :scheduled_start_time,
+                            :status,
+                            :next_notify_at,
+                            :next_message,
+                            :created_at,
+                            :ended_at
+                        )
+                        """,
+                        migrated_sessions,
+                    )
+                connection.exec_driver_sql("DROP TABLE sessions")
+                connection.exec_driver_sql(
+                    "ALTER TABLE sessions_new RENAME TO sessions"
+                )
+                connection.exec_driver_sql(
+                    "CREATE INDEX ix_sessions_rule_id ON sessions (rule_id)"
+                )
+                violations = connection.exec_driver_sql(
+                    "PRAGMA foreign_key_check"
+                ).all()
+                if violations:
+                    raise RuntimeError(
+                        "sessions 스키마 변경 후 외래 키 정합성 검사에 실패했습니다."
+                    )
+        finally:
+            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+            connection.commit()
+
+    logger.info("sessions 스키마 변경 완료 — identity=rule_id,date,start_time")
+
+
+def init_db() -> None:
+    """DB 파일 디렉터리를 보장하고 스키마를 생성·변경한다 (F-01 lifespan에서 호출).
+
+    세션 식별자 변경은 컬럼 존재 여부를 확인해 한 번만 적용하고, `create_all`은 없는
+    테이블만 생성하므로 재기동 시 안전하게 반복 호출할 수 있다(idempotent).
+    """
+    # sqlite:///./data/nudge.db → database="./data/nudge.db". 상위 디렉터리가 없으면
+    # SQLite가 파일을 못 만들어 "unable to open database file"로 실패하므로 미리 만든다.
+    # (:memory: 등 파일이 아닌 DB는 database가 비어 있어 건너뛴다.)
+    db_path = make_url(_settings.database_url).database
+    if db_path and db_path != ":memory:":
+        Path(db_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
+
+    _migrate_sessions_to_start_time_identity(engine)
     SQLModel.metadata.create_all(engine)
 
 

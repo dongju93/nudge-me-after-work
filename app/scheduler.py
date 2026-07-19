@@ -20,7 +20,7 @@ MemoryJobStore만 붙이므로 스케줄러 잡 자체는 휘발돼도 무방하
 """
 
 import logging
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -175,41 +175,60 @@ async def _trigger_first_notifications(
                 start_dt.isoformat(),
                 (start_dt + grace).isoformat(),
             )
-            await _open_session_and_notify(db, notifier, rule, today)
+            await _open_session_and_notify(
+                db,
+                notifier,
+                rule,
+                today,
+                scheduled_start_time=rule.start_time,
+            )
 
 
 async def _open_session_and_notify(
-    db: DBSession, notifier: Notifier, rule: Rule, today: date
+    db: DBSession,
+    notifier: Notifier,
+    rule: Rule,
+    today: date,
+    *,
+    scheduled_start_time: time,
 ) -> None:
-    """규칙의 오늘 세션을 만들고(중복이면 무시) 최초 알림을 발행한다.
+    """규칙의 예정 시작 시각에 해당하는 세션과 최초 알림을 생성한다.
 
-    같은 grace window 안에서 다음 tick이 다시 돌 수 있으므로 먼저 오늘 세션 존재 여부를
-    조회해 중복 INSERT를 피한다. 최종 안전장치는 여전히 F-02 `uq_sessions_rule_date`다.
-    중복이면 이미 처리된 것이므로 조용히 건너뛴다. 발행 실패(재시도 소진) 시엔 세션만
-    남기고 SENT는 기록하지 않은 채 진행한다 — 다음 단계/다음 tick을 막지 않는 것이 우선이다
-    (스펙 §4).
+    같은 grace window 안에서 다음 tick이 다시 돌 수 있으므로 날짜와 예정 시작 시각이
+    모두 같은 세션만 중복으로 본다. 같은 날 규칙의 시작 시각을 변경하면 별도 세션을
+    생성한다. DB unique constraint는 동시 실행에서도 같은 예정 시각의 중복 생성을 막는다.
     """
     assert rule.id is not None
     existing_session = db.exec(
         select(NudgeSession).where(
             col(NudgeSession.rule_id) == rule.id,
             col(NudgeSession.date) == today,
+            col(NudgeSession.scheduled_start_time) == scheduled_start_time,
         )
     ).first()
     if existing_session is not None:
         logger.info(
-            "최초 알림 건너뜀 — rule_id=%d date=%s reason=session_exists "
-            "session_id=%s status=%s",
+            "최초 알림 건너뜀 — rule_id=%d date=%s scheduled_start_time=%s "
+            "reason=session_exists session_id=%s status=%s",
             rule.id,
             today.isoformat(),
+            scheduled_start_time.isoformat(),
             existing_session.id,
             existing_session.status.value,
         )
         return
 
-    logger.info("세션 생성 시작 — rule_id=%d date=%s", rule.id, today.isoformat())
+    logger.info(
+        "세션 생성 시작 — rule_id=%d date=%s scheduled_start_time=%s",
+        rule.id,
+        today.isoformat(),
+        scheduled_start_time.isoformat(),
+    )
     session = NudgeSession(
-        rule_id=rule.id, date=today, status=SessionStatus.IN_PROGRESS
+        rule_id=rule.id,
+        date=today,
+        scheduled_start_time=scheduled_start_time,
+        status=SessionStatus.IN_PROGRESS,
     )
     db.add(session)
     try:
@@ -217,21 +236,13 @@ async def _open_session_and_notify(
     except IntegrityError:
         db.rollback()
         logger.info(
-            "세션 생성 건너뜀 — rule_id=%d date=%s reason=duplicate_integrity_error",
+            "세션 생성 건너뜀 — rule_id=%d date=%s scheduled_start_time=%s "
+            "reason=duplicate_integrity_error",
             rule.id,
             today.isoformat(),
+            scheduled_start_time.isoformat(),
         )
-        return  # 오늘 세션이 이미 존재 → 중복 발행 방지
-    except ValueError as exc:
-        db.rollback()
-        if _is_duplicate_session_error(exc):
-            logger.info(
-                "세션 생성 건너뜀 — rule_id=%d date=%s reason=duplicate_driver_error",
-                rule.id,
-                today.isoformat(),
-            )
-            return  # libSQL/Hrana는 UNIQUE 위반을 ValueError로 올릴 수 있다.
-        raise
+        return  # 같은 예정 시각의 세션이 이미 존재 → 중복 발행 방지
     db.refresh(session)
     assert session.id is not None  # 방금 커밋된 세션 → PK 채워짐(타입 내로잉)
     logger.info(
@@ -256,15 +267,6 @@ async def _open_session_and_notify(
             rule.id,
             session.id,
         )
-
-
-def _is_duplicate_session_error(error: BaseException) -> bool:
-    """드라이버별 UNIQUE 위반 메시지를 오늘 세션 중복으로 식별한다."""
-    message = str(error)
-    return (
-        "UNIQUE constraint failed: sessions.rule_id, sessions.date" in message
-        or "uq_sessions_rule_date" in message
-    )
 
 
 # --- (b) 스누즈 재발송 (UC-06) ----------------------------------------------

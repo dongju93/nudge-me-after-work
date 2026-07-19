@@ -71,6 +71,7 @@
                     <div>응답</div>
                     <div>상태</div>
                     <div>종료 시각</div>
+                    <div>관리</div>
                 </div>
                 {% if not sessions %}
                     <div class="session-table__empty">최근 14일간 실행된 세션이 없습니다.</div>
@@ -82,6 +83,22 @@
                             <div>{{ s.response }}</div>
                             <div><span class="session-badge session-badge--{{ s.status }}">{{ status_labels[s.status] }}</span></div>
                             <div class="session-table__dim">{{ s.ended_at }}</div>
+                            {# 진행 중 세션만 강제 완료/포기 버튼 노출 — 종료된 행은 빈 칸.
+                               resolution 값은 SessionStatus와 1:1(라우터 화이트리스트로 검증). #}
+                            <div class="session-actions">
+                                {% if s.is_in_progress %}
+                                    <form method="post"
+                                          action="{{ url_for('close_session', session_id=s.session_id) }}">
+                                        <input type="hidden" name="resolution" value="completed" />
+                                        <button type="submit" class="mini-btn mini-btn--complete">완료</button>
+                                    </form>
+                                    <form method="post"
+                                          action="{{ url_for('close_session', session_id=s.session_id) }}">
+                                        <input type="hidden" name="resolution" value="abandoned" />
+                                        <button type="submit" class="mini-btn mini-btn--abandon">포기</button>
+                                    </form>
+                                {% endif %}
+                            </div>
                         </div>
                     {% endfor %}
                 {% endif %}
