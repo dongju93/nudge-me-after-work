@@ -5,8 +5,10 @@
 """
 
 from collections.abc import Iterator
+from datetime import UTC, datetime
 import logging
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import Engine, event, inspect
 from sqlalchemy.engine import make_url
@@ -29,6 +31,14 @@ engine = create_engine(
 )
 
 
+def _scheduled_start_time_from_created_at(created_at: str) -> str:
+    """레거시 세션 생성 시각(naive UTC)을 로컬 wall-clock 시각으로 바꾼다."""
+    created = datetime.fromisoformat(created_at)
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=UTC)
+    return created.astimezone(ZoneInfo(_settings.timezone)).time().isoformat()
+
+
 @event.listens_for(engine, "connect")
 def _set_sqlite_pragma(dbapi_connection: object, _connection_record: object) -> None:
     """새 SQLite 커넥션마다 PRAGMA를 건다.
@@ -48,8 +58,9 @@ def _migrate_sessions_to_start_time_identity(db_engine: Engine) -> None:
     """기존 sessions의 날짜 단위 unique를 시작 시각 단위 unique로 교체한다.
 
     SQLite는 테이블 unique constraint를 직접 삭제할 수 없어 테이블을 재구성한다. 기존
-    행의 시작 시각은 현재 규칙의 start_time으로 채우며, PK를 유지해 session_events의
-    외래 키도 그대로 보존한다. 새 DB나 이미 변환된 DB에서는 아무 작업도 하지 않는다.
+    행의 시작 시각은 세션 생성 시각을 로컬 시각으로 변환해 채우며, PK를 유지해
+    session_events의 외래 키도 그대로 보존한다. 새 DB나 이미 변환된 DB에서는 아무
+    작업도 하지 않는다.
     """
     schema = inspect(db_engine)
     if not schema.has_table("sessions"):
@@ -65,6 +76,33 @@ def _migrate_sessions_to_start_time_identity(db_engine: Engine) -> None:
         connection.commit()
         try:
             with connection.begin():
+                legacy_sessions = (
+                    connection.exec_driver_sql(
+                        """
+                    SELECT
+                        id,
+                        rule_id,
+                        date,
+                        status,
+                        next_notify_at,
+                        next_message,
+                        created_at,
+                        ended_at
+                    FROM sessions
+                    """
+                    )
+                    .mappings()
+                    .all()
+                )
+                migrated_sessions = [
+                    {
+                        **dict(session),
+                        "scheduled_start_time": (
+                            _scheduled_start_time_from_created_at(session["created_at"])
+                        ),
+                    }
+                    for session in legacy_sessions
+                ]
                 connection.exec_driver_sql(
                     """
                     CREATE TABLE sessions_new (
@@ -84,33 +122,34 @@ def _migrate_sessions_to_start_time_identity(db_engine: Engine) -> None:
                     )
                     """
                 )
-                connection.exec_driver_sql(
-                    """
-                    INSERT INTO sessions_new (
-                        id,
-                        rule_id,
-                        date,
-                        scheduled_start_time,
-                        status,
-                        next_notify_at,
-                        next_message,
-                        created_at,
-                        ended_at
+                if migrated_sessions:
+                    connection.exec_driver_sql(
+                        """
+                        INSERT INTO sessions_new (
+                            id,
+                            rule_id,
+                            date,
+                            scheduled_start_time,
+                            status,
+                            next_notify_at,
+                            next_message,
+                            created_at,
+                            ended_at
+                        )
+                        VALUES (
+                            :id,
+                            :rule_id,
+                            :date,
+                            :scheduled_start_time,
+                            :status,
+                            :next_notify_at,
+                            :next_message,
+                            :created_at,
+                            :ended_at
+                        )
+                        """,
+                        migrated_sessions,
                     )
-                    SELECT
-                        sessions.id,
-                        sessions.rule_id,
-                        sessions.date,
-                        rules.start_time,
-                        sessions.status,
-                        sessions.next_notify_at,
-                        sessions.next_message,
-                        sessions.created_at,
-                        sessions.ended_at
-                    FROM sessions
-                    JOIN rules ON rules.id = sessions.rule_id
-                    """
-                )
                 connection.exec_driver_sql("DROP TABLE sessions")
                 connection.exec_driver_sql(
                     "ALTER TABLE sessions_new RENAME TO sessions"

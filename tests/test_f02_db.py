@@ -46,7 +46,8 @@ def test_session_schema_migration_preserves_rows_and_allows_same_day_runs(
             )
             """
         )
-        connection.exec_driver_sql("INSERT INTO rules VALUES (1, '20:00:00')")
+        # 기존 세션 생성 후 관리자가 규칙 시작 시각을 20:05로 바꾼 상태를 재현한다.
+        connection.exec_driver_sql("INSERT INTO rules VALUES (1, '20:05:00')")
         connection.exec_driver_sql(
             """
             INSERT INTO sessions (
@@ -73,6 +74,8 @@ def test_session_schema_migration_preserves_rows_and_allows_same_day_runs(
         migrated = connection.exec_driver_sql(
             "SELECT id, scheduled_start_time FROM sessions"
         ).one()
+        # 현재 규칙의 20:05가 아니라 기존 세션 생성 시각(UTC 11:00 → KST 20:00)을
+        # 보존해야 아래의 새 20:05 실행을 막지 않는다.
         assert migrated == (10, "20:00:00")
         assert (
             connection.exec_driver_sql(
