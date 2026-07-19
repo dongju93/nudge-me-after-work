@@ -292,6 +292,58 @@ def test_session_row_no_clicks_labels(engine):
     assert rows[1].ended_at == "23:00"
 
 
+@pytest.mark.parametrize(
+    ("status", "expected_response"),
+    [
+        (SessionStatus.COMPLETED, "관리자 완료"),
+        (SessionStatus.ABANDONED, "관리자 포기"),
+    ],
+)
+def test_session_row_admin_close_labels(engine, status, expected_response):
+    """관리자 강제 종료는 완료/포기 상태에 맞는 응답으로 표시한다."""
+    rule_id = _make_rule(engine)
+    base = datetime(2026, 7, 9, 11, 0, tzinfo=UTC)
+    _add_session(
+        engine,
+        rule_id,
+        on=TODAY,
+        status=status,
+        ended_at=base + timedelta(minutes=12),
+        events=[
+            (EventType.SENT, None, base),
+            (EventType.AUTO_CLOSED, None, base + timedelta(minutes=12)),
+        ],
+    )
+
+    with DBSession(engine) as db:
+        rows = session_rows(db, _get_rule(db, rule_id), today=TODAY, tz=KST)
+
+    assert rows[0].response == expected_response
+
+
+def test_session_row_snooze_then_admin_close_keeps_response_chain(engine):
+    """스누즈 뒤 관리자 종료도 앞선 사용자 응답과 종료 주체를 모두 표시한다."""
+    rule_id = _make_rule(engine)
+    base = datetime(2026, 7, 9, 11, 0, tzinfo=UTC)
+    _add_session(
+        engine,
+        rule_id,
+        on=TODAY,
+        status=SessionStatus.COMPLETED,
+        ended_at=base + timedelta(minutes=12),
+        events=[
+            (EventType.SENT, None, base),
+            (EventType.CLICKED, "나중에", base + timedelta(minutes=5)),
+            (EventType.AUTO_CLOSED, None, base + timedelta(minutes=12)),
+        ],
+    )
+
+    with DBSession(engine) as db:
+        rows = session_rows(db, _get_rule(db, rule_id), today=TODAY, tz=KST)
+
+    assert rows[0].response == "나중에 → 관리자 완료"
+
+
 def test_session_row_missing_sent_shows_dash(engine):
     """SENT 이벤트가 없으면(발행 실패 등) 발행 시각은 '-'."""
     rule_id = _make_rule(engine)
@@ -392,14 +444,14 @@ def _get_session(engine, session_id: int) -> NudgeSession:
 
 
 @pytest.mark.parametrize(
-    ("resolution", "expected"),
+    ("resolution", "expected", "expected_response"),
     [
-        ("completed", SessionStatus.COMPLETED),
-        ("abandoned", SessionStatus.ABANDONED),
+        ("completed", SessionStatus.COMPLETED, "관리자 완료"),
+        ("abandoned", SessionStatus.ABANDONED, "관리자 포기"),
     ],
 )
 async def test_force_close_transitions_and_records_event(
-    engine, overrides, resolution, expected
+    engine, overrides, resolution, expected, expected_response
 ):
     """진행 중 세션을 완료/포기로 강제 종료하면 303 + 상태 전이 + AUTO_CLOSED 기록."""
     rule_id = _make_rule(engine)
@@ -435,6 +487,11 @@ async def test_force_close_transitions_and_records_event(
         assert session is not None
         events = list(session.events)
     assert any(e.event_type == EventType.AUTO_CLOSED for e in events)
+
+    async with _client() as ac:
+        history_resp = await ac.get(f"/history?rule_id={rule_id}")
+    assert history_resp.status_code == 200
+    assert expected_response in history_resp.text
 
 
 async def test_force_close_ignores_already_ended_session(engine, overrides):
