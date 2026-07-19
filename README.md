@@ -4,6 +4,9 @@
 
 정해진 요일과 시간에 ntfy 알림을 보내고, 사용자가 알림 버튼으로 응답한 내용에 따라 완료, 스누즈, 포기, 무응답 상태를 기록합니다. 반복되는 저녁 루틴을 관리 화면에서 규칙으로 만들고, 실행 이력을 통해 어떤 활동이 실제로 이어졌는지 확인하는 데 초점을 둡니다.
 
+이 프로젝트는 여러 사용자가 하나의 공개 인스턴스를 함께 이용하는 서비스가 아니라 개인별
+셀프 호스팅을 전제로 합니다. 필요한 경우 자신의 환경에 독립적으로 배포해 사용할 수 있습니다.
+
 ## 주요 기능
 
 - 리마인더 규칙 관리
@@ -62,6 +65,10 @@
 - `SessionEvent`: 알림 발행, 버튼 클릭, 자동 종료 같은 세션 이벤트
 
 ## 배포 (Docker)
+
+배포용 이미지는 Docker Hub의
+[`tls2323/nudge-me-after-work`](https://hub.docker.com/r/tls2323/nudge-me-after-work)에서
+제공합니다.
 
 단일 컨테이너를 자가호스팅(예: 라즈베리파이)으로 상시 구동합니다. 스케줄러가 매분
 tick을 돌려야 하므로 상시 실행이 전제이며, `restart: unless-stopped`로 재부팅·크래시
@@ -195,4 +202,6 @@ docker compose up -d          # 바뀐 이미지로 재생성
 `LOGFIRE_TOKEN`을 채우면 Logfire로 로그·트레이스를 전송합니다. 비워두면 Docker 로그만
 사용합니다.
 
-- Logfire 대시보드: <https://logfire-us.pydantic.dev/dongju93/nudge-me-after-work>
+아래 [Logfire 대시보드](https://logfire-us.pydantic.dev/dongju93/nudge-me-after-work)는
+`dongju93`이 운영하는 배포 환경에 연결되어 있습니다. 별도로 배포한 환경의 로그와 트레이스는
+설정한 `LOGFIRE_TOKEN`에 해당하는 Logfire 프로젝트에서 확인해야 합니다.
