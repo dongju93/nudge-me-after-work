@@ -18,7 +18,8 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlmodel import Session as DBSession, col, select
+from sqlmodel import Session as DBSession
+from sqlmodel import col, select
 
 from app.models import EventType, NudgeSession, Rule, SessionEvent, SessionStatus
 

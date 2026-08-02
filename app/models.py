@@ -14,13 +14,14 @@ from enum import StrEnum
 
 from sqlmodel import (
     Column,
-    Enum as SAEnum,
     Field,
     Relationship,
     SQLModel,
     UniqueConstraint,
 )
-
+from sqlmodel import (
+    Enum as SAEnum,
+)
 
 # --- 상태/타입 값 (UI 설계의 STATUS_META / ACTION_TYPE_META 키와 동일 문자열) ---
 #

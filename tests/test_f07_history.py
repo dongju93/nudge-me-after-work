@@ -12,7 +12,8 @@ from zoneinfo import ZoneInfo
 import pytest
 from httpx2 import ASGITransport, AsyncClient
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session as DBSession, SQLModel, create_engine
+from sqlmodel import Session as DBSession
+from sqlmodel import SQLModel, create_engine
 
 from app.config import Settings, get_settings
 from app.db import get_db_session

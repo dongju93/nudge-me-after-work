@@ -14,7 +14,8 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlmodel import Session as DBSession, col, select
+from sqlmodel import Session as DBSession
+from sqlmodel import col, select
 
 from app.config import Settings, get_settings
 from app.db import get_db_session

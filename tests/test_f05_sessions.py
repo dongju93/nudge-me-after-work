@@ -15,7 +15,8 @@ from datetime import date, time
 import pytest
 from httpx2 import ASGITransport, AsyncClient
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session as DBSession, SQLModel, create_engine, select
+from sqlmodel import Session as DBSession
+from sqlmodel import SQLModel, create_engine, select
 
 from app.config import Settings, get_settings
 from app.db import get_db_session
@@ -204,7 +205,7 @@ def ids_fixture(engine):
     """
     with DBSession(engine) as db:
         rule1, actions1 = _make_rule(db, "운동")
-        rule2, actions2 = _make_rule(db, "독서")
+        _rule2, actions2 = _make_rule(db, "독서")
         session = _make_session(db, rule1)
         data = {
             "session_id": session.id,

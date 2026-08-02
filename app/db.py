@@ -4,15 +4,16 @@
 스키마 생성·변경(`init_db`)은 lifespan 기동 시 1회 호출한다.
 """
 
+import logging
 from collections.abc import Iterator
 from datetime import UTC, datetime
-import logging
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import Engine, event, inspect
 from sqlalchemy.engine import make_url
-from sqlmodel import Session as DBSession, SQLModel, create_engine
+from sqlmodel import Session as DBSession
+from sqlmodel import SQLModel, create_engine
 
 # 모델 모듈을 반드시 import해야 SQLModel.metadata에 테이블 4종이 등록된다.
 # (create_all은 메타데이터에 등록된 테이블만 생성하므로, 이 import가 없으면 빈 DB가 된다.)

@@ -26,7 +26,8 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session as DBSession, col, select
+from sqlmodel import Session as DBSession
+from sqlmodel import col, select
 
 from app import diagnostics
 from app.config import Settings
@@ -51,9 +52,15 @@ _TICK_JOB_ID = "nudge_tick"
 
 
 def create_scheduler(*, notifier: Notifier, settings: Settings) -> AsyncIOScheduler:
-    """매분 tick을 도는 AsyncIOScheduler를 만든다 (lifespan에서 start/shutdown).
+    """매분 정각(0초)에 tick을 도는 AsyncIOScheduler를 만든다 (lifespan에서 start/shutdown).
 
-    APScheduler **3.x API**. 잡스토어는 기본 MemoryJobStore를 그대로 쓴다 — 모든 상태가
+    APScheduler **3.x API**. 트리거는 interval이 아니라 **cron(second=0)** 이다 —
+    interval은 `start_date`(생략 시 잡 등록 시각 = 앱 기동 시각)에 주기를 더하므로
+    10:43:42에 기동하면 계속 :42초에 발화한다. cron은 벽시계 절대 시각 집합이라
+    기동 시각과 무관하게 분 경계에 정렬되고, 그래야 tick의 grace window 판정이
+    규칙의 분 단위 `start_time`과 어긋나지 않는다.
+
+    잡스토어는 기본 MemoryJobStore를 그대로 쓴다 — 모든 상태가
     DB에 있으므로(위 설명) SQLAlchemyJobStore를 붙일 이유가 없다. 옵션 의미:
       - coalesce=True        : 밀려 누적된 실행을 1회로 합쳐 재알림 폭주를 막는다.
       - max_instances=1      : tick 중복 실행 방지(느린 발행이 다음 tick과 겹치지 않게).
@@ -73,15 +80,15 @@ def create_scheduler(*, notifier: Notifier, settings: Settings) -> AsyncIOSchedu
 
     scheduler.add_job(
         _tick_job,
-        "interval",
-        minutes=1,
+        "cron",
+        second=0,
         coalesce=True,
         max_instances=1,
         misfire_grace_time=30,
         id=_TICK_JOB_ID,
     )
     logger.info(
-        "스케줄러 작업 등록 완료 — job_id=%s interval_minutes=1 timezone=%s "
+        "스케줄러 작업 등록 완료 — job_id=%s trigger=cron(second=0) timezone=%s "
         "coalesce=true max_instances=1 misfire_grace_seconds=30",
         _TICK_JOB_ID,
         settings.timezone,

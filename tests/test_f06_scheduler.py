@@ -14,7 +14,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session as DBSession, SQLModel, create_engine, select
+from sqlmodel import Session as DBSession
+from sqlmodel import SQLModel, create_engine, select
 
 from app.config import Settings
 from app.models import (
@@ -27,7 +28,7 @@ from app.models import (
     SessionStatus,
 )
 from app.notifier import Notifier, NtfyPublishError
-from app.scheduler import _WEEKDAY_TOKENS, tick
+from app.scheduler import _TICK_JOB_ID, _WEEKDAY_TOKENS, create_scheduler, tick
 
 KST = ZoneInfo("Asia/Seoul")
 GRACE_MINUTES = 10
@@ -519,3 +520,27 @@ async def test_full_timeline_first_snooze_resend_cutoff(engine):
     # 이벤트는 시간순으로 SENT(최초) → SENT(재발송) → AUTO_CLOSED.
     event_types = [e.event_type for e in _events(engine, session_id)]
     assert event_types == [EventType.SENT, EventType.SENT, EventType.AUTO_CLOSED]
+
+
+def test_tick_job_fires_on_minute_boundary_regardless_of_start_time() -> None:
+    """tick 잡은 앱 기동 초와 무관하게 매분 0초에 발화한다.
+
+    interval 트리거는 기준점이 잡 등록 시각이라 10:43:42에 기동하면 계속 :42초에
+    돌았다. cron(second=0)은 벽시계 절대 시각이므로 기동 시각이 어긋나도 분 경계로
+    정렬된다 — 되돌아가도 앱은 정상 동작처럼 보여서 테스트로 고정해 둔다.
+    """
+    scheduler = create_scheduler(notifier=FakeNotifier(), settings=_settings())
+    job = scheduler.get_job(_TICK_JOB_ID)
+    assert job is not None
+
+    booted_at = datetime(2026, 7, 9, 10, 43, 42, tzinfo=KST)
+    fire_times = []
+    now = booted_at
+    for _ in range(3):
+        now = job.trigger.get_next_fire_time(now, now)
+        fire_times.append(now)
+        now += timedelta(seconds=1)
+
+    assert [t.second for t in fire_times] == [0, 0, 0]
+    assert fire_times[0] == datetime(2026, 7, 9, 10, 44, tzinfo=KST)
+    assert fire_times[1] - fire_times[0] == timedelta(minutes=1)
