@@ -164,7 +164,25 @@ docker buildx build --push \
   -t tls2323/nudge-me-after-work:0.1.0 .
 ```
 
-### 3. 데이터 지속성
+### 3. SBOM 생성
+
+[Syft](https://github.com/anchore/syft)를 사용하면 배포 이미지에 포함된 운영체제 패키지와
+Python 패키지 등의 구성요소를 SBOM(Software Bill of Materials)으로 만들 수 있습니다.
+이미지를 새로 push한 뒤 다음 명령으로 CycloneDX JSON과 SPDX JSON을 각각 생성합니다.
+
+```bash
+syft tls2323/nudge-me-after-work:latest -o cyclonedx-json=nudge-me-after-work.cdx.json
+syft tls2323/nudge-me-after-work:latest -o spdx-json=nudge-me-after-work.spdx.json
+```
+
+- `nudge-me-after-work.cdx.json`: CycloneDX 형식의 구성요소·의존성 목록
+- `nudge-me-after-work.spdx.json`: SPDX 형식의 패키지·라이선스·관계 정보
+
+SBOM은 생성 시점의 이미지 구성요소 목록이며 취약점이 없음을 보증하는 보고서는 아닙니다.
+`latest` 이미지가 갱신될 때마다 다시 생성하고, 특정 릴리스를 재현 가능하게 감사해야 한다면
+변경 가능한 `latest` 대신 버전 태그나 이미지 digest를 지정합니다.
+
+### 4. 데이터 지속성
 
 SQLite 파일은 named volume `nudge-data`에 저장됩니다. 이미지가 `/data`를 앱 사용자
 (uid 10001) 소유로 만들어 두므로 비루트 프로세스가 bind 마운트 chown 없이 바로 씁니다.
@@ -179,7 +197,7 @@ docker run --rm -v nudge-data:/data -v "$PWD":/backup alpine \
   cp /data/nudge.db /backup/nudge-backup.db
 ```
 
-### 4. 헬스체크 · TLS
+### 5. 헬스체크 · TLS
 
 - 앱 컨테이너 HEALTHCHECK는 인증·DB 없이 프로세스 응답만 확인하는 `GET /health`, nginx
   컨테이너는 앱과 분리된 `GET /healthz`를 씁니다.
@@ -188,7 +206,7 @@ docker run --rm -v nudge-data:/data -v "$PWD":/backup alpine \
   종단하므로 앞단 프록시가 필요 없습니다. HTTP Basic 자격증명은 base64 인코딩일 뿐 암호화가
   아니므로, 반드시 https(`18443`)로만 공개하고 평문 HTTP로 노출하지 마세요.
 
-### 5. 업데이트
+### 6. 업데이트
 
 새 이미지를 push한 뒤, 배포 서버에서 최신 `latest`를 받아 교체합니다(볼륨 데이터는 유지).
 
