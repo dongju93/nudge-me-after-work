@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ── Builder: uv로 .venv만 만든다. uv 바이너리·빌드 캐시는 런타임에 남기지 않는다. ──
-FROM python:3.13-slim-bookworm AS builder
+FROM python:3.14-slim-bookworm AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.29 /uv /uvx /bin/
 
@@ -18,7 +18,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
 # ── Runtime: 인터프리터 + .venv + 앱 소스만. uv 없음, 컴파일러 없음. ──
-FROM python:3.13-slim-bookworm
+FROM python:3.14-slim-bookworm
 
 # PATH에 .venv/bin을 얹어 `python`이 곧 가상환경 인터프리터가 되게 한다.
 # DATABASE_URL: 컨테이너 기본값을 마운트 볼륨(/data)의 절대경로로 고정한다. 코드 기본값은
