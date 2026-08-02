@@ -22,5 +22,10 @@ AGENTS.md
 CLAUDE.md
 compose.yaml
 
+# 공급망 증거 산출물(런타임 불필요, SBOM은 7MB대라 컨텍스트 전송 비용이 크다)
+vex/
+sbom/
+DOCKER_SCOUT_CVE_ASSESSMENT.md
+
 # 로컬 산출물
 **/.DS_Store
