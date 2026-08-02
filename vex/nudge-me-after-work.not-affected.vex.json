@@ -1,0 +1,446 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/dongju93/nudge-me-after-work/vex/2026-08-02-not-affected",
+  "author": "spdlqj011@gmail.com",
+  "role": "Maintainer, nudge-me-after-work",
+  "timestamp": "2026-08-02T14:34:34Z",
+  "version": 1,
+  "tooling": "hand-authored/openvex-0.2.0",
+  "statements": [
+    {
+      "@id": "https://github.com/dongju93/nudge-me-after-work/vex/2026-08-02-not-affected/CVE-2026-48959",
+      "vulnerability": {
+        "name": "CVE-2026-48959",
+        "description": "IO::Uncompress::Unzip heap overflow in the Perl distribution"
+      },
+      "timestamp": "2026-08-02T14:34:34Z",
+      "products": [
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:ea60d777491ef899675a4eda9c31dfc6834d76a3f3eebdc82e53d5b2b1872da0",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/perl@5.36.0-7%2Bdeb12u3?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:db5e8509759f793d5db4a9ee1e2e8d9d97333688d81f4fa16e81594dfa97b740",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/perl@5.36.0-7%2Bdeb12u3?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "status_notes": "Only perl-base 5.36.0-7+deb12u3 is installed; perl-modules-5.36 is not. `perl -MIO::Uncompress::Unzip -e1` fails inside the image, so the affected module is not shipped. Verified against image ID sha256:ea60d777."
+    },
+    {
+      "@id": "https://github.com/dongju93/nudge-me-after-work/vex/2026-08-02-not-affected/CVE-2026-48962",
+      "vulnerability": {
+        "name": "CVE-2026-48962",
+        "description": "IO::Compress::Zip / File::GlobMapper flaw in the Perl distribution"
+      },
+      "timestamp": "2026-08-02T14:34:34Z",
+      "products": [
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:ea60d777491ef899675a4eda9c31dfc6834d76a3f3eebdc82e53d5b2b1872da0",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/perl@5.36.0-7%2Bdeb12u3?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:db5e8509759f793d5db4a9ee1e2e8d9d97333688d81f4fa16e81594dfa97b740",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/perl@5.36.0-7%2Bdeb12u3?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "status_notes": "Neither IO::Compress::Zip nor File::GlobMapper resolves in the image; both live in perl-modules-5.36, which perl-base does not pull in. Verified against image ID sha256:ea60d777."
+    },
+    {
+      "@id": "https://github.com/dongju93/nudge-me-after-work/vex/2026-08-02-not-affected/CVE-2026-7010",
+      "vulnerability": {
+        "name": "CVE-2026-7010",
+        "description": "HTTP::Tiny certificate/redirect handling flaw"
+      },
+      "timestamp": "2026-08-02T14:34:34Z",
+      "products": [
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:ea60d777491ef899675a4eda9c31dfc6834d76a3f3eebdc82e53d5b2b1872da0",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/perl@5.36.0-7%2Bdeb12u3?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:db5e8509759f793d5db4a9ee1e2e8d9d97333688d81f4fa16e81594dfa97b740",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/perl@5.36.0-7%2Bdeb12u3?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "status_notes": "HTTP::Tiny is not resolvable in the image; it ships in perl-modules-5.36, which is not installed. The application performs HTTP through Python httpx, never Perl."
+    },
+    {
+      "@id": "https://github.com/dongju93/nudge-me-after-work/vex/2026-08-02-not-affected/CVE-2025-15649",
+      "vulnerability": {
+        "name": "CVE-2025-15649",
+        "description": "IO::Uncompress::Unzip flaw in the Perl distribution"
+      },
+      "timestamp": "2026-08-02T14:34:34Z",
+      "products": [
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:ea60d777491ef899675a4eda9c31dfc6834d76a3f3eebdc82e53d5b2b1872da0",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/perl@5.36.0-7%2Bdeb12u3?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:db5e8509759f793d5db4a9ee1e2e8d9d97333688d81f4fa16e81594dfa97b740",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/perl@5.36.0-7%2Bdeb12u3?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "status_notes": "Same absent module as CVE-2026-48959: IO::Uncompress::Unzip is not present in the image."
+    },
+    {
+      "@id": "https://github.com/dongju93/nudge-me-after-work/vex/2026-08-02-not-affected/CVE-2026-48961",
+      "vulnerability": {
+        "name": "CVE-2026-48961",
+        "description": "zipdetails CLI flaw shipped with the Perl distribution"
+      },
+      "timestamp": "2026-08-02T14:34:34Z",
+      "products": [
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:ea60d777491ef899675a4eda9c31dfc6834d76a3f3eebdc82e53d5b2b1872da0",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/perl@5.36.0-7%2Bdeb12u3?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:db5e8509759f793d5db4a9ee1e2e8d9d97333688d81f4fa16e81594dfa97b740",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/perl@5.36.0-7%2Bdeb12u3?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "status_notes": "The zipdetails executable is not on the filesystem; it ships in perl-modules-5.36, which is not installed."
+    },
+    {
+      "@id": "https://github.com/dongju93/nudge-me-after-work/vex/2026-08-02-not-affected/CVE-2023-31486",
+      "vulnerability": {
+        "name": "CVE-2023-31486",
+        "description": "HTTP::Tiny TLS certificate verification disabled by default"
+      },
+      "timestamp": "2026-08-02T14:34:34Z",
+      "products": [
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:ea60d777491ef899675a4eda9c31dfc6834d76a3f3eebdc82e53d5b2b1872da0",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/perl@5.36.0-7%2Bdeb12u3?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:db5e8509759f793d5db4a9ee1e2e8d9d97333688d81f4fa16e81594dfa97b740",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/perl@5.36.0-7%2Bdeb12u3?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "status_notes": "HTTP::Tiny is absent from the image, so no Perl code path can make an unverified TLS connection."
+    },
+    {
+      "@id": "https://github.com/dongju93/nudge-me-after-work/vex/2026-08-02-not-affected/CVE-2025-52099",
+      "vulnerability": {
+        "name": "CVE-2025-52099",
+        "description": "Withdrawn SQLite report"
+      },
+      "timestamp": "2026-08-02T14:34:34Z",
+      "products": [
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:ea60d777491ef899675a4eda9c31dfc6834d76a3f3eebdc82e53d5b2b1872da0",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/sqlite3@3.40.1-2%2Bdeb12u2?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:db5e8509759f793d5db4a9ee1e2e8d9d97333688d81f4fa16e81594dfa97b740",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/sqlite3@3.40.1-2%2Bdeb12u2?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "status_notes": "The official CVE record at cve.org is in REJECTED state, so no vulnerable code is defined by this identifier. Re-check if MITRE ever re-publishes it."
+    },
+    {
+      "@id": "https://github.com/dongju93/nudge-me-after-work/vex/2026-08-02-not-affected/CVE-2025-29088",
+      "vulnerability": {
+        "name": "CVE-2025-29088",
+        "description": "SQLite denial of service via sqlite3_db_config"
+      },
+      "timestamp": "2026-08-02T14:34:34Z",
+      "products": [
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:ea60d777491ef899675a4eda9c31dfc6834d76a3f3eebdc82e53d5b2b1872da0",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/sqlite3@3.40.1-2%2Bdeb12u2?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:db5e8509759f793d5db4a9ee1e2e8d9d97333688d81f4fa16e81594dfa97b740",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/sqlite3@3.40.1-2%2Bdeb12u2?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "status_notes": "The CVE record scopes the flaw to SQLite >=3.49.0,<3.49.1. The image ships 3.40.1, released before the offending code existed, so the vulnerable code is not in this build."
+    },
+    {
+      "@id": "https://github.com/dongju93/nudge-me-after-work/vex/2026-08-02-not-affected/CVE-2025-70873",
+      "vulnerability": {
+        "name": "CVE-2025-70873",
+        "description": "SQLite zipfile extension flaw"
+      },
+      "timestamp": "2026-08-02T14:34:34Z",
+      "products": [
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:ea60d777491ef899675a4eda9c31dfc6834d76a3f3eebdc82e53d5b2b1872da0",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/sqlite3@3.40.1-2%2Bdeb12u2?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:db5e8509759f793d5db4a9ee1e2e8d9d97333688d81f4fa16e81594dfa97b740",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/sqlite3@3.40.1-2%2Bdeb12u2?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "status_notes": "Only libsqlite3.so.0 and Python's _sqlite3 extension are installed. The zipfile extension ships with the sqlite3 CLI tooling, which is not in the image."
+    },
+    {
+      "@id": "https://github.com/dongju93/nudge-me-after-work/vex/2026-08-02-not-affected/CVE-2025-27587",
+      "vulnerability": {
+        "name": "CVE-2025-27587",
+        "description": "Minerva timing side channel in OpenSSL P-384 on PowerPC"
+      },
+      "timestamp": "2026-08-02T14:34:34Z",
+      "products": [
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:ea60d777491ef899675a4eda9c31dfc6834d76a3f3eebdc82e53d5b2b1872da0",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/openssl@3.0.20-1~deb12u2?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:db5e8509759f793d5db4a9ee1e2e8d9d97333688d81f4fa16e81594dfa97b740",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/openssl@3.0.20-1~deb12u2?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "status_notes": "The vulnerability is confined to OpenSSL's PowerPC assembly implementation. This image is linux/arm64, so that code is never built or shipped. Re-evaluate if a ppc64le image variant is ever published."
+    },
+    {
+      "@id": "https://github.com/dongju93/nudge-me-after-work/vex/2026-08-02-not-affected/CVE-2010-0928",
+      "vulnerability": {
+        "name": "CVE-2010-0928",
+        "description": "OpenSSL 0.9.8i RSA fault-injection attack on LEON3/Xilinx FPGA hardware"
+      },
+      "timestamp": "2026-08-02T14:34:34Z",
+      "products": [
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:ea60d777491ef899675a4eda9c31dfc6834d76a3f3eebdc82e53d5b2b1872da0",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/openssl@3.0.20-1~deb12u2?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:db5e8509759f793d5db4a9ee1e2e8d9d97333688d81f4fa16e81594dfa97b740",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/openssl@3.0.20-1~deb12u2?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "status_notes": "The advisory targets OpenSSL 0.9.8i running on LEON3 SPARC/Xilinx FPGA hardware and requires physical voltage fault injection. This image ships OpenSSL 3.0.20 on arm64; neither the affected code base nor the attack precondition applies."
+    },
+    {
+      "@id": "https://github.com/dongju93/nudge-me-after-work/vex/2026-08-02-not-affected/CVE-2025-14104",
+      "vulnerability": {
+        "name": "CVE-2025-14104",
+        "description": "util-linux login-utils chfn/chsh flaw"
+      },
+      "timestamp": "2026-08-02T14:34:34Z",
+      "products": [
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:ea60d777491ef899675a4eda9c31dfc6834d76a3f3eebdc82e53d5b2b1872da0",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/util-linux@2.38.1-5%2Bdeb12u3?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:db5e8509759f793d5db4a9ee1e2e8d9d97333688d81f4fa16e81594dfa97b740",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/util-linux@2.38.1-5%2Bdeb12u3?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "status_notes": "Debian builds chfn/chsh from the shadow source package, not from util-linux login-utils; dpkg -S confirms both binaries in this image belong to the passwd package. The util-linux implementation named by the advisory is not shipped."
+    },
+    {
+      "@id": "https://github.com/dongju93/nudge-me-after-work/vex/2026-08-02-not-affected/CVE-2022-0563",
+      "vulnerability": {
+        "name": "CVE-2022-0563",
+        "description": "util-linux chfn/chsh readline INPUTRC information disclosure"
+      },
+      "timestamp": "2026-08-02T14:34:34Z",
+      "products": [
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:ea60d777491ef899675a4eda9c31dfc6834d76a3f3eebdc82e53d5b2b1872da0",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/util-linux@2.38.1-5%2Bdeb12u3?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:db5e8509759f793d5db4a9ee1e2e8d9d97333688d81f4fa16e81594dfa97b740",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/util-linux@2.38.1-5%2Bdeb12u3?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "status_notes": "Same reason as CVE-2025-14104: the util-linux login-utils build of chfn/chsh is not installed. `dpkg -S /usr/bin/chfn /usr/bin/chsh` resolves to the passwd package in this image."
+    },
+    {
+      "@id": "https://github.com/dongju93/nudge-me-after-work/vex/2026-08-02-not-affected/CVE-2022-27943",
+      "vulnerability": {
+        "name": "CVE-2022-27943",
+        "description": "Stack exhaustion in libiberty/rust-demangle.c"
+      },
+      "timestamp": "2026-08-02T14:34:34Z",
+      "products": [
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:ea60d777491ef899675a4eda9c31dfc6834d76a3f3eebdc82e53d5b2b1872da0",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/gcc-12@12.2.0-14%2Bdeb12u1?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:db5e8509759f793d5db4a9ee1e2e8d9d97333688d81f4fa16e81594dfa97b740",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/gcc-12@12.2.0-14%2Bdeb12u1?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "status_notes": "Scout matches the gcc-12 source package, but only the runtime binaries gcc-12-base, libgcc-s1 and libstdc++6 are installed. libiberty and the nm/c++filt demanglers that contain rust-demangle.c are not in the image; no compiler or binutils is shipped in the runtime stage."
+    },
+    {
+      "@id": "https://github.com/dongju93/nudge-me-after-work/vex/2026-08-02-not-affected/CVE-2007-5686",
+      "vulnerability": {
+        "name": "CVE-2007-5686",
+        "description": "rPath Linux 1 initscripts insecure permissions on login utilities"
+      },
+      "timestamp": "2026-08-02T14:34:34Z",
+      "products": [
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:ea60d777491ef899675a4eda9c31dfc6834d76a3f3eebdc82e53d5b2b1872da0",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/shadow@1%3A4.13%2Bdfsg1-1%2Bdeb12u2?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/tls2323/nudge-me-after-work@sha256:db5e8509759f793d5db4a9ee1e2e8d9d97333688d81f4fa16e81594dfa97b740",
+          "subcomponents": [
+            {
+              "@id": "pkg:deb/debian/shadow@1%3A4.13%2Bdfsg1-1%2Bdeb12u2?os_distro=bookworm&os_name=debian&os_version=12"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "status_notes": "The advisory describes an rPath Linux 1 initscripts packaging defect, not a defect in shadow's source. Debian's shadow package does not carry the affected initscripts, and this image runs no init system."
+    }
+  ]
+}
